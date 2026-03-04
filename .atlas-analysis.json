@@ -1,0 +1,110 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "RDAP",
+  "projectDescription": "Modern RDAP (Registration Data Access Protocol) client and library for querying domain, IP, and ASN registration data",
+  "theme": "aspen",
+  "primaryColor": "#2967ec",
+  "lightColor": "#8cb4f4",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "CLI Usage",
+            "pages": [
+              "cli/basic-queries",
+              "cli/query-types",
+              "cli/output-formats",
+              "cli/advanced-options",
+              "cli/configuration"
+            ]
+          },
+          {
+            "group": "Library Usage",
+            "pages": [
+              "library/getting-started",
+              "library/basic-queries",
+              "library/query-types",
+              "library/working-with-results",
+              "library/error-handling",
+              "library/examples"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "architecture",
+              "rfcs",
+              "troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Types",
+            "pages": [
+              "api/rdap-client",
+              "api/rdap-request",
+              "api/query-type",
+              "api/rdap-object"
+            ]
+          },
+          {
+            "group": "Data Models",
+            "pages": [
+              "api/models/domain",
+              "api/models/ip-network",
+              "api/models/autnum",
+              "api/models/entity",
+              "api/models/nameserver"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "api/config",
+              "api/bootstrap",
+              "api/cache"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Full RDAP protocol support (RFC 7480-7484)",
+    "Automatic bootstrap service discovery",
+    "Query type auto-detection",
+    "Multi-layer RDAP queries (registry + registrar)",
+    "Beautiful colored terminal output",
+    "Async/await support with Tokio",
+    "Disk and memory caching",
+    "Configurable bootstrap URLs and TLD overrides",
+    "Support for domains, IPs (IPv4/IPv6), CIDR, AS numbers, entities, nameservers"
+  ],
+  "publicApiSurface": [
+    "RdapClient::new() - Create new RDAP client",
+    "RdapClient::query() - Execute RDAP query",
+    "RdapClient::query_with_referral() - Query with registrar referral support",
+    "RdapRequest::new() - Create query request",
+    "RdapRequest::detect_type() - Auto-detect query type",
+    "RdapRequest::with_server() - Use custom RDAP server",
+    "QueryType enum - Domain, Tld, Ip, Autnum, Entity, Nameserver",
+    "RdapObject enum - Domain, IpNetwork, Autnum, Entity, Nameserver, Error",
+    "Config::load() - Load configuration",
+    "RdapDisplay trait - Format output for display"
+  ]
+}
