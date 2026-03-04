@@ -1,0 +1,157 @@
+---
+title: Search Results
+description: Search result container types for domain, entity, and nameserver searches
+---
+
+## Overview
+
+RDAP supports search queries that return multiple results. The search result types wrap collections of objects along with metadata like notices and conformance information.
+
+## DomainSearchResults
+
+Container for domain search query results.
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance array
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices about the search
+</ResponseField>
+
+<ResponseField name="domains" type="Vec<Domain>">
+  Array of domain objects matching the search
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for textual content
+</ResponseField>
+
+### Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::DomainSearch, "example*");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::DomainSearch(search_results) = result {
+        println!("Found {} domains", search_results.domains.len());
+        for domain in &search_results.domains {
+            if let Some(name) = &domain.ldh_name {
+                println!("  - {}", name);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## EntitySearchResults
+
+Container for entity search query results.
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance array
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices about the search
+</ResponseField>
+
+<ResponseField name="entities" type="Vec<Entity>">
+  Array of entity objects matching the search
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for textual content
+</ResponseField>
+
+### Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::EntitySearch, "ACME*");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::EntitySearch(search_results) = result {
+        println!("Found {} entities", search_results.entities.len());
+        for entity in &search_results.entities {
+            if let Some(handle) = &entity.handle {
+                println!("  - {}", handle);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## NameserverSearchResults
+
+Container for nameserver search query results.
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance array
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices about the search
+</ResponseField>
+
+<ResponseField name="nameservers" type="Vec<Nameserver>">
+  Array of nameserver objects matching the search
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for textual content
+</ResponseField>
+
+### Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::NameserverSearch, "ns*.example.com");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::NameserverSearch(search_results) = result {
+        println!("Found {} nameservers", search_results.nameservers.len());
+        for ns in &search_results.nameservers {
+            if let Some(name) = &ns.ldh_name {
+                println!("  - {}", name);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## Search Support
+
+<Note>
+  Not all RDAP servers support search queries. Check the server's help endpoint or documentation for search capabilities.
+</Note>
+
+<Warning>
+  Search queries may return partial results due to server limits. Always check the notices field for information about result truncation.
+</Warning>
+
+## Related
+
+- [QueryType](/api/query-type) - Search query types
+- [Domain](/api/models/domain) - Domain object structure
+- [Entity](/api/models/entity) - Entity object structure
+- [Nameserver](/api/models/nameserver) - Nameserver object structure

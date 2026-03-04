@@ -1,0 +1,247 @@
+---
+title: IP Utilities
+description: IP address normalization and CIDR handling functions
+---
+
+## Overview
+
+The `ip` module provides utilities for normalizing IP addresses, detecting IP-like inputs, and working with CIDR notation. These functions are used internally for query processing but are also available for library users.
+
+## Functions
+
+### normalize_ip
+
+Normalizes an IP address string, handling shorthand formats.
+
+```rust
+pub fn normalize_ip(input: &str) -> Option<String>
+```
+
+<ParamField path="input" type="&str" required>
+  IP address string to normalize
+</ParamField>
+
+<ResponseField name="return" type="Option<String>">
+  Normalized IP address, or None if invalid
+</ResponseField>
+
+**Supported formats:**
+- Standard IPv4: `"192.168.1.1"` → `"192.168.1.1"`
+- Standard IPv6: `"2001:db8::1"` → `"2001:db8::1"`
+- Shorthand IPv4: `"1.1"` → `"1.0.0.1"`, `"1.2.3"` → `"1.2.0.3"`
+- Single octet: `"1"` → `"0.0.0.1"`
+- CIDR notation: `"8.8.8.0/24"` → `"8.8.8.0/24"`
+- Shorthand CIDR: `"1.1/16"` → `"1.0.0.1/16"`
+- Numeric IPv4: `16843009` → `"1.1.1.1"`
+
+#### Example
+
+```rust
+use rdap::ip::normalize_ip;
+
+fn main() {
+    // Standard IPv4
+    assert_eq!(normalize_ip("192.168.1.1"), Some("192.168.1.1".to_string()));
+    
+    // Shorthand IPv4
+    assert_eq!(normalize_ip("1.1"), Some("1.0.0.1".to_string()));
+    assert_eq!(normalize_ip("8.8"), Some("8.0.0.8".to_string()));
+    
+    // CIDR notation
+    assert_eq!(normalize_ip("8.8.8.0/24"), Some("8.8.8.0/24".to_string()));
+    
+    // IPv6
+    assert_eq!(normalize_ip("2001:db8::1"), Some("2001:db8::1".to_string()));
+    
+    // Invalid input
+    assert_eq!(normalize_ip("not-an-ip"), None);
+}
+```
+
+### is_ip_like
+
+Checks if a string looks like an IP address or CIDR notation.
+
+```rust
+pub fn is_ip_like(input: &str) -> bool
+```
+
+<ParamField path="input" type="&str" required>
+  String to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the input looks like an IP address
+</ResponseField>
+
+This function is used for query type auto-detection. It returns `true` if:
+- The string contains a colon (likely IPv6)
+- All characters are digits or dots (likely IPv4)
+
+#### Example
+
+```rust
+use rdap::ip::is_ip_like;
+
+fn main() {
+    assert!(is_ip_like("192.168.1.1"));
+    assert!(is_ip_like("1.1"));
+    assert!(is_ip_like("8.8.8.0/24"));
+    assert!(is_ip_like("2001:db8::1"));
+    
+    assert!(!is_ip_like("example.com"));
+    assert!(!is_ip_like("google"));
+}
+```
+
+### is_cidr
+
+Checks if the input is valid CIDR notation.
+
+```rust
+pub fn is_cidr(input: &str) -> bool
+```
+
+<ParamField path="input" type="&str" required>
+  String to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the input is valid CIDR notation
+</ResponseField>
+
+Validates that:
+- The string contains a slash separator
+- The prefix length is a valid number
+- The IP part can be normalized
+- The prefix length is within valid range (0-32 for IPv4, 0-128 for IPv6)
+
+#### Example
+
+```rust
+use rdap::ip::is_cidr;
+
+fn main() {
+    assert!(is_cidr("8.8.8.0/24"));
+    assert!(is_cidr("1.1/16"));
+    assert!(is_cidr("2001:db8::/32"));
+    
+    assert!(!is_cidr("8.8.8.8"));
+    assert!(!is_cidr("example.com"));
+    assert!(!is_cidr("8.8.8.0/999")); // Invalid prefix
+}
+```
+
+### extract_ip_from_cidr
+
+Extracts the IP address part from CIDR notation, or returns the normalized IP if not CIDR.
+
+```rust
+pub fn extract_ip_from_cidr(input: &str) -> String
+```
+
+<ParamField path="input" type="&str" required>
+  IP address or CIDR string
+</ParamField>
+
+<ResponseField name="return" type="String">
+  The IP address part, normalized
+</ResponseField>
+
+#### Example
+
+```rust
+use rdap::ip::extract_ip_from_cidr;
+
+fn main() {
+    // Extract from CIDR
+    assert_eq!(extract_ip_from_cidr("8.8.8.0/24"), "8.8.8.0");
+    assert_eq!(extract_ip_from_cidr("1.1/16"), "1.0.0.1");
+    
+    // Non-CIDR input
+    assert_eq!(extract_ip_from_cidr("8.8.8.8"), "8.8.8.8");
+    assert_eq!(extract_ip_from_cidr("1.1"), "1.0.0.1");
+}
+```
+
+## Shorthand IP Expansion Rules
+
+The normalization follows these rules for shorthand IPv4:
+
+| Input | Normalized | Rule |
+|-------|-----------|------|
+| `1` | `0.0.0.1` | Single octet → `0.0.0.X` |
+| `1.2` | `1.0.0.2` | Two octets → `X.0.0.Y` |
+| `1.2.3` | `1.2.0.3` | Three octets → `X.Y.0.Z` |
+| `1.2.3.4` | `1.2.3.4` | Four octets → unchanged |
+
+<Note>
+  Shorthand expansion is useful for quick CLI queries like `rdap 1.1` instead of typing `rdap 1.0.0.1`.
+</Note>
+
+## Usage in Query Detection
+
+These functions are used internally by `RdapRequest::detect_type()` to determine if a query is an IP address:
+
+```rust
+use rdap::{RdapRequest, QueryType};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Auto-detected as IP due to is_ip_like()
+    let query_type = RdapRequest::detect_type("8.8.8.8")?;
+    assert_eq!(query_type, QueryType::Ip);
+    
+    // Auto-detected as IP due to IPv6 colon
+    let query_type = RdapRequest::detect_type("2001:db8::1")?;
+    assert_eq!(query_type, QueryType::Ip);
+    
+    // Auto-detected as Domain (not IP-like)
+    let query_type = RdapRequest::detect_type("example.com")?;
+    assert_eq!(query_type, QueryType::Domain);
+    
+    Ok(())
+}
+```
+
+## IPv6 Support
+
+IPv6 addresses are validated and returned as-is (no normalization applied):
+
+```rust
+use rdap::ip::normalize_ip;
+
+fn main() {
+    // Compressed IPv6
+    assert_eq!(normalize_ip("2001:db8::1"), Some("2001:db8::1".to_string()));
+    
+    // Loopback
+    assert_eq!(normalize_ip("::1"), Some("::1".to_string()));
+    
+    // Full form
+    assert_eq!(
+        normalize_ip("2001:0db8:0000:0000:0000:0000:0000:0001"),
+        Some("2001:0db8:0000:0000:0000:0000:0000:0001".to_string())
+    );
+}
+```
+
+## Error Handling
+
+All functions return `Option` or `bool`, making it safe to handle invalid inputs:
+
+```rust
+use rdap::ip::normalize_ip;
+
+fn main() {
+    match normalize_ip("invalid-ip") {
+        Some(normalized) => println!("Normalized: {}", normalized),
+        None => println!("Invalid IP address"),
+    }
+}
+```
+
+## See Also
+
+- [RdapRequest](/api/rdap-request) - Uses these functions for query type detection
+- [CLI Basic Queries](/cli/basic-queries) - Shorthand IP usage examples
+- [QueryType](/api/query-type) - Query type auto-detection

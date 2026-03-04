@@ -1,0 +1,256 @@
+---
+title: VCard
+description: vCard contact information in jCard format (RFC 7095)
+---
+
+## Overview
+
+The `VCard` struct represents contact information in jCard format (RFC 7095), which is the JSON representation of vCard (RFC 6350). VCards are used in RDAP Entity objects to store contact details.
+
+## VCard
+
+Represents a vCard with multiple properties.
+
+### Methods
+
+<ParamField path="from_array" type="fn(&[Value]) -> Option<Self>">
+  Parse a VCard from jCard array format
+</ParamField>
+
+<ParamField path="name" type="fn(&self) -> Option<&str>">
+  Get the formatted name (FN property)
+</ParamField>
+
+<ParamField path="email" type="fn(&self) -> Option<&str>">
+  Get the email address
+</ParamField>
+
+<ParamField path="tel" type="fn(&self) -> Option<&str>">
+  Get the telephone number
+</ParamField>
+
+<ParamField path="org" type="fn(&self) -> Option<&str>">
+  Get the organization name
+</ParamField>
+
+<ParamField path="address" type="fn(&self) -> Option<VCardAddress>">
+  Get the address components
+</ParamField>
+
+<ParamField path="properties" type="fn(&self) -> &[VCardProperty]">
+  Get all vCard properties
+</ParamField>
+
+### Example: Accessing Contact Information
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::Domain(domain) = result {
+        for entity in &domain.entities {
+            if let Some(vcard) = &entity.vcard {
+                // Access common fields
+                if let Some(name) = vcard.name() {
+                    println!("Name: {}", name);
+                }
+                if let Some(email) = vcard.email() {
+                    println!("Email: {}", email);
+                }
+                if let Some(tel) = vcard.tel() {
+                    println!("Phone: {}", tel);
+                }
+                if let Some(org) = vcard.org() {
+                    println!("Organization: {}", org);
+                }
+                
+                // Access address
+                if let Some(addr) = vcard.address() {
+                    if let Some(label) = &addr.label {
+                        println!("Address: {}", label);
+                    } else {
+                        println!("Street: {}", addr.street);
+                        println!("City: {}", addr.locality);
+                        println!("State: {}", addr.region);
+                        println!("Postal: {}", addr.postal_code);
+                        println!("Country: {}", addr.country);
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## VCardProperty
+
+Individual vCard property with parameters and value.
+
+<ResponseField name="name" type="String">
+  Property name (e.g., "fn", "email", "tel", "adr")
+</ResponseField>
+
+<ResponseField name="parameters" type="Map<String, Value>">
+  Property parameters (e.g., type, label)
+</ResponseField>
+
+<ResponseField name="value_type" type="String">
+  Value type (e.g., "text", "uri")
+</ResponseField>
+
+<ResponseField name="value" type="VCardValue">
+  The property value
+</ResponseField>
+
+## VCardValue
+
+Enum representing different vCard value types.
+
+<ResponseField name="Text" type="String">
+  Simple text value
+</ResponseField>
+
+<ResponseField name="Structured" type="Vec<String>">
+  Structured value with multiple components (e.g., name parts, address parts)
+</ResponseField>
+
+<ResponseField name="Array" type="Vec<String>">
+  Array of values
+</ResponseField>
+
+## VCardAddress
+
+Structured address information.
+
+<ResponseField name="label" type="Option<String>">
+  Pre-formatted address string (if provided by server)
+</ResponseField>
+
+<ResponseField name="po_box" type="String">
+  Post office box
+</ResponseField>
+
+<ResponseField name="extended" type="String">
+  Extended address (e.g., apartment number)
+</ResponseField>
+
+<ResponseField name="street" type="String">
+  Street address
+</ResponseField>
+
+<ResponseField name="locality" type="String">
+  City or locality
+</ResponseField>
+
+<ResponseField name="region" type="String">
+  State, province, or region
+</ResponseField>
+
+<ResponseField name="postal_code" type="String">
+  Postal code or ZIP code
+</ResponseField>
+
+<ResponseField name="country" type="String">
+  Country name
+</ResponseField>
+
+### Example: Filtering by Role
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::Domain(domain) = result {
+        // Find technical contact
+        for entity in &domain.entities {
+            if entity.roles.contains(&"technical".to_string()) {
+                if let Some(vcard) = &entity.vcard {
+                    println!("Technical Contact:");
+                    if let Some(name) = vcard.name() {
+                        println!("  Name: {}", name);
+                    }
+                    if let Some(email) = vcard.email() {
+                        println!("  Email: {}", email);
+                    }
+                }
+            }
+        }
+        
+        // Find administrative contact
+        for entity in &domain.entities {
+            if entity.roles.contains(&"administrative".to_string()) {
+                if let Some(vcard) = &entity.vcard {
+                    println!("Administrative Contact:");
+                    if let Some(name) = vcard.name() {
+                        println!("  Name: {}", name);
+                    }
+                    if let Some(email) = vcard.email() {
+                        println!("  Email: {}", email);
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## jCard Format
+
+The jCard format (RFC 7095) represents vCard data as JSON arrays. Each property is represented as:
+
+```json
+["property-name", {parameters}, "value-type", "value"]
+```
+
+Example jCard:
+
+```json
+["vcard",
+  [
+    ["version", {}, "text", "4.0"],
+    ["fn", {}, "text", "John Doe"],
+    ["email", {}, "text", "john@example.com"],
+    ["tel", {"type": "work"}, "text", "+1-555-0100"],
+    ["adr", {},
+      "text",
+      ["", "", "123 Main St", "Anytown", "CA", "12345", "USA"]
+    ]
+  ]
+]
+```
+
+<Note>
+  Many RDAP servers redact contact information for privacy. You may see "REDACTED FOR PRIVACY" in place of actual values.
+</Note>
+
+## Common vCard Properties
+
+- `fn` - Formatted name
+- `email` - Email address
+- `tel` - Telephone number
+- `org` - Organization
+- `adr` - Postal address
+- `title` - Job title
+- `role` - Role or occupation
+- `url` - Website URL
+- `version` - vCard version (usually "4.0")
+
+## See Also
+
+- [Entity](/api/models/entity) - Entity model that contains VCard
+- [RFC 7095](https://tools.ietf.org/html/rfc7095) - jCard specification
+- [RFC 6350](https://tools.ietf.org/html/rfc6350) - vCard specification

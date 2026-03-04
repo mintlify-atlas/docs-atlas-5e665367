@@ -1,0 +1,242 @@
+---
+title: Common Models
+description: Shared structures used across RDAP objects (Link, Notice, Event, PublicId)
+---
+
+## Overview
+
+These common structures appear in multiple RDAP object types and represent standard metadata like links, notices, events, and public identifiers.
+
+## Link
+
+Represents a hyperlink to related resources.
+
+<ResponseField name="value" type="Option<String>">
+  Value context for the link
+</ResponseField>
+
+<ResponseField name="rel" type="Option<String>">
+  Relationship type (e.g., "self", "related", "alternate")
+</ResponseField>
+
+<ResponseField name="href" type="String" required>
+  The link URL
+</ResponseField>
+
+<ResponseField name="hreflang" type="Vec<String>">
+  Language tags for the linked resource
+</ResponseField>
+
+<ResponseField name="title" type="Option<String>">
+  Human-readable title for the link
+</ResponseField>
+
+<ResponseField name="media" type="Option<String>">
+  Media type hint
+</ResponseField>
+
+<ResponseField name="link_type" type="Option<String>">
+  MIME type of the linked resource (mapped from JSON field "type")
+</ResponseField>
+
+### Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::Domain(domain) = result {
+        for link in &domain.links {
+            println!("Link: {}", link.href);
+            if let Some(rel) = &link.rel {
+                println!("  Rel: {}", rel);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## Notice
+
+Informational message about the RDAP response or object.
+
+<ResponseField name="title" type="Option<String>">
+  Short title for the notice
+</ResponseField>
+
+<ResponseField name="notice_type" type="Option<String>">
+  Type classification for the notice (mapped from JSON field "type")
+</ResponseField>
+
+<ResponseField name="description" type="Vec<String>">
+  Array of description lines
+</ResponseField>
+
+<ResponseField name="links" type="Vec<Link>">
+  Related links for more information
+</ResponseField>
+
+### Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::Domain(domain) = result {
+        for notice in &domain.notices {
+            if let Some(title) = &notice.title {
+                println!("Notice: {}", title);
+            }
+            for line in &notice.description {
+                println!("  {}", line);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## Remark
+
+Type alias for `Notice`. Remarks are structurally identical to notices but are used for object-specific information rather than response-level notices.
+
+```rust
+pub type Remark = Notice;
+```
+
+## Event
+
+Represents a significant event in an object's lifecycle.
+
+<ResponseField name="action" type="String" required>
+  Event action (e.g., "registration", "expiration", "last changed", "last update of RDAP database")
+</ResponseField>
+
+<ResponseField name="actor" type="Option<String>">
+  Entity handle responsible for the event
+</ResponseField>
+
+<ResponseField name="date" type="String" required>
+  ISO 8601 timestamp of the event
+</ResponseField>
+
+<ResponseField name="links" type="Vec<Link>">
+  Related links
+</ResponseField>
+
+### Common Event Actions
+
+- `registration` - Initial registration date
+- `expiration` - Expiration date
+- `last changed` - Last modification date
+- `last update of RDAP database` - When RDAP data was last updated
+- `reregistration` - Re-registration after deletion
+- `reinstatement` - Restoration after suspension
+- `transfer` - Ownership transfer
+- `locked` - When object was locked
+- `unlocked` - When object was unlocked
+
+### Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::Domain(domain) = result {
+        for event in &domain.events {
+            println!("{}: {}", event.action, event.date);
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## PublicId
+
+Public identifier for an object (e.g., IANA Registrar ID).
+
+<ResponseField name="id_type" type="String" required>
+  Type of identifier (mapped from JSON field "type")
+</ResponseField>
+
+<ResponseField name="identifier" type="String" required>
+  The identifier value
+</ResponseField>
+
+### Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+    
+    if let RdapObject::Domain(domain) = result {
+        for entity in &domain.entities {
+            for public_id in &entity.public_ids {
+                println!("{}: {}", public_id.id_type, public_id.identifier);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## Status
+
+Type alias for a vector of status strings.
+
+```rust
+pub type Status = Vec<String>;
+```
+
+Common status values include:
+- `validated` - Signifies that the data has been validated
+- `renew prohibited` - Renewal not allowed
+- `update prohibited` - Update not allowed
+- `transfer prohibited` - Transfer not allowed
+- `delete prohibited` - Deletion not allowed
+- `proxy` - Object has privacy/proxy enabled
+- `private` - Some data is private
+- `removed` - Object has been removed
+- `obscured` - Some data has been obscured
+- `associated` - Object has associations
+- `active` - Object is active
+- `inactive` - Object is inactive
+- `locked` - Object is locked
+- `pending create` - Pending creation
+- `pending renew` - Pending renewal
+- `pending transfer` - Pending transfer
+- `pending update` - Pending update
+- `pending delete` - Pending deletion
+
+## See Also
+
+- [Domain](/api/models/domain) - Uses all common models
+- [Entity](/api/models/entity) - Uses Link, Notice, Event
+- [Nameserver](/api/models/nameserver) - Uses Link, Notice, Event
+- [IpNetwork](/api/models/ip-network) - Uses Link, Notice, Event
+- [Autnum](/api/models/autnum) - Uses Link, Notice, Event

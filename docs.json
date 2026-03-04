@@ -86,7 +86,16 @@
               "api/models/ip-network",
               "api/models/autnum",
               "api/models/entity",
-              "api/models/nameserver"
+              "api/models/nameserver",
+              "api/models/vcard",
+              "api/models/search-results",
+              "api/models/common"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/ip-utilities"
             ]
           },
           {
