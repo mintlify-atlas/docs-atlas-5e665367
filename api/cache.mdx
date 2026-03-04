@@ -1,0 +1,288 @@
+---
+title: Cache API
+description: Bootstrap file caching for RDAP client
+---
+
+## Overview
+
+The cache system stores IANA bootstrap registry files locally to reduce network requests and improve performance. Cached files are automatically invalidated after a configurable TTL (time-to-live).
+
+## Cache
+
+Bootstrap cache manager.
+
+```rust
+pub struct Cache
+```
+
+Manages cached bootstrap files with automatic expiration based on file modification time.
+
+### new()
+
+Creates a new cache instance.
+
+```rust
+pub fn new() -> Result<Cache>
+```
+
+Initializes cache with:
+- **Cache directory:** `~/.cache/rdap/` on all platforms (determined by `$HOME` environment variable)
+- **Default TTL:** 24 hours (86400 seconds)
+
+The cache directory is created automatically if it doesn't exist.
+
+**Returns:** Configured `Cache` instance
+
+### with_ttl()
+
+Sets a custom cache TTL.
+
+```rust
+pub const fn with_ttl(self, ttl: Duration) -> Self
+```
+
+<ParamField path="ttl" type="Duration" required>
+  Time-to-live for cached files
+</ParamField>
+
+**Returns:** `Cache` instance with updated TTL
+
+**Example:**
+
+```rust
+use std::time::Duration;
+use rdap::cache::Cache;
+
+let cache = Cache::new()?
+    .with_ttl(Duration::from_secs(3600)); // 1 hour TTL
+```
+
+### get()
+
+Retrieves a cached file if valid.
+
+```rust
+pub fn get(&self, key: &str) -> Option<Vec<u8>>
+```
+
+<ParamField path="key" type="&str" required>
+  Cache key (filename)
+</ParamField>
+
+**Returns:** Cached file contents if valid, or `None` if:
+- File doesn't exist
+- File has expired (modification time + TTL < current time)
+- File cannot be read
+
+Expired files are automatically deleted when accessed.
+
+### set()
+
+Saves data to cache.
+
+```rust
+pub fn set(&self, key: &str, data: &[u8]) -> Result<()>
+```
+
+<ParamField path="key" type="&str" required>
+  Cache key (filename)
+</ParamField>
+
+<ParamField path="data" type="&[u8]" required>
+  Data to cache
+</ParamField>
+
+Writes data to `~/.cache/rdap/{key}`. The file's modification time is used for TTL calculation.
+
+### clear()
+
+Clears all cached files.
+
+```rust
+pub fn clear(&self) -> Result<()>
+```
+
+Removes all files from the cache directory. Useful for forcing fresh downloads of bootstrap registries.
+
+## Cache Directory
+
+The cache directory is determined by the `$HOME` environment variable:
+
+- **Path:** `~/.cache/rdap/`
+- **Platform:** Same location on Linux, macOS, and Windows (via WSL)
+- **Auto-created:** Directory is created automatically if it doesn't exist
+
+### Typical Cached Files
+
+The cache directory typically contains:
+
+```
+~/.cache/rdap/
+├── dns.json      # DNS bootstrap registry
+├── asn.json      # ASN bootstrap registry
+├── ipv4.json     # IPv4 bootstrap registry
+└── ipv6.json     # IPv6 bootstrap registry
+```
+
+## Cache Invalidation
+
+Cache invalidation is based on file modification time:
+
+```
+Expired if: (current_time - file_modified_time) > TTL
+```
+
+### Automatic Invalidation
+
+When `get()` is called:
+1. Check if file exists
+2. Read file metadata to get modification time
+3. Calculate elapsed time since modification
+4. If elapsed > TTL:
+   - Delete the file
+   - Return `None`
+5. Otherwise, return file contents
+
+### Manual Invalidation
+
+Use `clear()` to force invalidation of all cached files:
+
+```rust
+let cache = Cache::new()?;
+cache.clear()?;
+```
+
+## Caching Behavior
+
+### Default TTL
+
+The default TTL is **24 hours** (86400 seconds). This balances:
+- **Performance:** Reduces network requests for frequently-used bootstrap registries
+- **Freshness:** Ensures IANA updates are picked up within a day
+
+### Custom TTL
+
+Customize TTL based on your use case:
+
+```rust
+use std::time::Duration;
+
+// Short TTL for development (1 hour)
+let cache = Cache::new()?.with_ttl(Duration::from_secs(3600));
+
+// Long TTL for production (7 days)
+let cache = Cache::new()?.with_ttl(Duration::from_secs(7 * 24 * 3600));
+
+// No caching (0 seconds)
+let cache = Cache::new()?.with_ttl(Duration::from_secs(0));
+```
+
+### Cache Miss Handling
+
+When `get()` returns `None`, the bootstrap client fetches the registry from IANA and caches it with `set()`:
+
+```rust
+let cache = Cache::new()?;
+let key = "dns.json";
+
+if let Some(data) = cache.get(key) {
+    // Use cached data
+} else {
+    // Fetch from IANA
+    let data = fetch_from_iana().await?;
+    cache.set(key, &data)?;
+}
+```
+
+## Configuration Integration
+
+The cache TTL can be configured via `config.json`:
+
+```json
+{
+  "cache": {
+    "ttl_seconds": 86400
+  }
+}
+```
+
+See [Configuration API](/api/config) for details on configuration file locations and priority.
+
+## Example Usage
+
+### Basic Caching
+
+```rust
+use rdap::cache::Cache;
+
+let cache = Cache::new()?;
+
+// Try to get cached data
+if let Some(data) = cache.get("dns.json") {
+    println!("Using cached bootstrap registry");
+    // Parse and use data
+} else {
+    println!("Cache miss, fetching from IANA");
+    // Fetch and cache
+}
+```
+
+### Custom TTL
+
+```rust
+use rdap::cache::Cache;
+use std::time::Duration;
+
+// 1 hour cache
+let cache = Cache::new()?
+    .with_ttl(Duration::from_secs(3600));
+
+cache.set("dns.json", &data)?;
+
+// Will expire after 1 hour
+```
+
+### Cache Management
+
+```rust
+use rdap::cache::Cache;
+
+let cache = Cache::new()?;
+
+// Clear all cached files
+cache.clear()?;
+println!("Cache cleared");
+
+// Force fresh downloads
+let data = fetch_fresh_data().await?;
+cache.set("dns.json", &data)?;
+```
+
+## Error Handling
+
+Cache operations can fail due to:
+
+- **I/O errors:** Permission issues, disk full, etc.
+- **Directory creation:** Unable to create `~/.cache/rdap/`
+- **File operations:** Unable to read/write cache files
+
+Errors are propagated as `Result<T>` and should be handled appropriately:
+
+```rust
+use rdap::cache::Cache;
+
+match Cache::new() {
+    Ok(cache) => {
+        // Use cache
+    }
+    Err(e) => {
+        eprintln!("Failed to initialize cache: {}", e);
+        // Fall back to non-cached operation
+    }
+}
+```
+
+## Related
+
+- [Configuration API](/api/config) - Cache TTL configuration
+- [Bootstrap API](/api/bootstrap) - Bootstrap registry fetching and caching

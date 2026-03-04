@@ -1,80 +1,537 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with RDAP in minutes - learn the basics and run your first query
 ---
 
-## Get started in three steps
+# Quickstart Guide
 
-Get your documentation site running locally and make your first customization.
+This guide will get you from zero to querying RDAP data in under 5 minutes. We'll cover the most common use cases and show you how to get the information you need.
 
-### Step 1: Set up your local environment
+## Your First Query
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+The simplest way to use RDAP is to just pass a domain name, IP address, or AS number:
 
-### Step 2: Deploy your changes
+```bash
+rdap example.com
+```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+That's it! The tool will:
+1. Auto-detect that you're querying a domain
+2. Find the authoritative RDAP server using IANA bootstrap
+3. Query both the registry (Verisign for .com) and registrar
+4. Display formatted, colorized results
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Tip>
+RDAP automatically detects what you're querying - domain, IP, AS number, or TLD. No need to specify the type!
+</Tip>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Common Query Types
 
-### Step 3: Go live
+### Domain Names
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+Query registration information for any domain:
 
-## Next steps
+```bash
+rdap google.com
+```
 
-Now that you have your docs running, explore these key features:
+**What you'll see:**
+- Abuse contact email (displayed first for easy access)
+- Domain status (locked, active, etc.)
+- Nameservers
+- Registration and expiration dates
+- Registrar information
+- DNSSEC status
 
-<CardGroup cols={2}>
+<CodeGroup>
+```bash Basic Domain Query
+rdap example.com
+```
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+```bash With Verbose Output
+rdap -v example.com
+```
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+```bash JSON Output
+rdap -f json example.com
+```
+</CodeGroup>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+### Top-Level Domains (TLDs)
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+Query TLD information directly from IANA:
 
-</CardGroup>
+```bash
+# Query a brand TLD
+rdap google
+
+# Query a country code TLD
+rdap uk
+
+# Query a generic TLD
+rdap com
+```
+
+**What you'll see:**
+- Administrative contact
+- Technical contact  
+- Nameservers with IP addresses
+- DNSSEC DS records
+- Registration and update dates
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+When querying a single word like "google", RDAP checks if it's a valid TLD. If so, it queries the TLD; otherwise, it treats it as a domain name.
 </Note>
+
+### IP Addresses
+
+Query both IPv4 and IPv6 addresses:
+
+<CodeGroup>
+```bash IPv4 Address
+rdap 8.8.8.8
+```
+
+```bash IPv6 Address
+rdap 2001:4860:4860::8888
+```
+
+```bash Shorthand IPv4 (auto-expanded)
+rdap 1.1
+# Automatically expands to 1.0.0.1
+```
+
+```bash CIDR Range
+rdap 8.8.8.0/24
+```
+</CodeGroup>
+
+**What you'll see:**
+- Abuse contact (displayed first)
+- IP range allocation
+- Network name and type
+- Country
+- Registration organization
+- Status and dates
+
+<Tip>
+RDAP supports IP shorthand like `1.1` which automatically expands to `1.0.0.1`. This is perfect for quick lookups!
+</Tip>
+
+### AS Numbers
+
+Query autonomous system information:
+
+<CodeGroup>
+```bash With AS Prefix
+rdap AS15169
+```
+
+```bash Without AS Prefix
+rdap 15169
+```
+
+```bash Specific Example
+rdap AS8888
+```
+</CodeGroup>
+
+**What you'll see:**
+- Abuse contact (displayed first)
+- AS number and name
+- AS type
+- Country
+- Contact information
+- Status and registration dates
+
+## Output Formats
+
+RDAP supports three output formats:
+
+<Tabs>
+  <Tab title="Text (Default)">
+    Beautiful, colorized terminal output:
+    
+    ```bash
+    rdap example.com
+    ```
+    
+    Perfect for human reading with:
+    - Color-coded information
+    - Hierarchical display
+    - Abuse contacts highlighted
+  </Tab>
+  
+  <Tab title="JSON">
+    Compact JSON for parsing:
+    
+    ```bash
+    rdap -f json example.com
+    ```
+    
+    Use this for:
+    - Piping to `jq`
+    - Automation scripts
+    - Minimal output size
+  </Tab>
+  
+  <Tab title="JSON Pretty">
+    Formatted JSON with indentation:
+    
+    ```bash
+    rdap -f json-pretty example.com
+    ```
+    
+    Best for:
+    - Debugging
+    - Saving to files
+    - Reading JSON structure
+  </Tab>
+</Tabs>
+
+### Working with JSON Output
+
+Combine RDAP with `jq` for powerful data extraction:
+
+```bash
+# Get just the nameservers
+rdap -f json example.com | jq '.nameservers[].ldh_name'
+
+# Extract expiration date
+rdap -f json example.com | jq '.events[] | select(.action=="expiration") | .date'
+
+# Get abuse contact email
+rdap -f json 8.8.8.8 | jq '.entities[] | select(.roles[] | contains("abuse")) | .vcard[1][][1]'
+```
+
+## Advanced Options
+
+### Specify Query Type
+
+Override automatic detection:
+
+```bash
+rdap -t domain example.com
+rdap -t ip 8.8.8.8
+rdap -t autnum 15169
+```
+
+Available types: `domain`, `tld`, `ip`, `autnum`, `entity`, `nameserver`
+
+### Use Custom RDAP Server
+
+Query a specific RDAP server directly:
+
+```bash
+rdap -s https://rdap.verisign.com/com/v1 example.com
+```
+
+<Warning>
+When using a custom server, make sure the server is authoritative for the resource you're querying.
+</Warning>
+
+### Adjust Timeout
+
+Set a custom timeout for slow servers:
+
+```bash
+# 60 second timeout
+rdap --timeout 60 example.com
+```
+
+### Disable Registrar Referral
+
+For domains, skip the registrar query and only show registry data:
+
+```bash
+rdap --no-referral example.com
+```
+
+### Control JSON Source
+
+For domain queries with JSON output, choose which data to return:
+
+```bash
+# Return registrar data (default)
+rdap -f json --json-source registrar example.com
+
+# Return only registry data
+rdap -f json --json-source registry example.com
+```
+
+## Using as a Library
+
+RDAP isn't just a CLI tool - it's also a powerful Rust library.
+
+### Basic Example
+
+```rust examples/basic_query.rs
+use rdap::{QueryType, RdapClient, RdapRequest, display::RdapDisplay};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a client
+    let client = RdapClient::new()?;
+
+    // Create a domain query
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+
+    // Execute the query
+    let result = client.query(&request).await?;
+
+    // Display the result with colors
+    result.display(false);
+
+    Ok(())
+}
+```
+
+### Auto-Detection
+
+```rust examples/auto_detect.rs
+use rdap::{RdapClient, RdapRequest};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+
+    // Auto-detect query type
+    let query = "8.8.8.8";
+    let query_type = RdapRequest::detect_type(query)?;
+    
+    let request = RdapRequest::new(query_type, query);
+    let result = client.query(&request).await?;
+    
+    // Display result
+    use rdap::display::RdapDisplay;
+    result.display(false);
+    
+    Ok(())
+}
+```
+
+### Extract Domain Information
+
+```rust examples/domain_info.rs
+use rdap::{QueryType, RdapClient, RdapObject, RdapRequest};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+
+    if let RdapObject::Domain(domain) = result {
+        // Access domain properties
+        println!("Domain: {}", domain.ldh_name.unwrap_or_default());
+        
+        // Check status
+        for status in &domain.status {
+            println!("Status: {}", status);
+        }
+        
+        // List nameservers
+        for ns in &domain.nameservers {
+            if let Some(name) = &ns.ldh_name {
+                println!("Nameserver: {}", name);
+            }
+        }
+        
+        // Check DNSSEC
+        if let Some(dnssec) = &domain.secure_dns {
+            if let Some(signed) = dnssec.delegation_signed {
+                println!("DNSSEC: {}", if signed { "Signed" } else { "Not signed" });
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### Query AS Numbers
+
+```rust examples/asn_lookup.rs
+use rdap::{QueryType, RdapClient, RdapObject, RdapRequest};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+    let result = client.query(&request).await?;
+
+    if let RdapObject::Autnum(autnum) = result {
+        if let Some(start) = autnum.start_autnum {
+            println!("AS Number: AS{}", start);
+        }
+        if let Some(name) = &autnum.name {
+            println!("Name: {}", name);
+        }
+        if let Some(country) = &autnum.country {
+            println!("Country: {}", country);
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### Use Custom Server
+
+```rust examples/custom_server.rs
+use rdap::{QueryType, RdapClient, RdapRequest, display::RdapDisplay};
+use url::Url;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+
+    // Query with a specific RDAP server
+    let server = Url::parse("https://rdap.nic.cz")?;
+    let request = RdapRequest::new(QueryType::Domain, "nic.cz")
+        .with_server(server);
+
+    let result = client.query(&request).await?;
+    result.display(false);
+
+    Ok(())
+}
+```
+
+### JSON Output
+
+```rust examples/json_output.rs
+use rdap::{QueryType, RdapClient, RdapRequest};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+
+    // Output as pretty JSON
+    let json = serde_json::to_string_pretty(&result)?;
+    println!("{}", json);
+
+    Ok(())
+}
+```
+
+<Tip>
+All examples are available in the `examples/` directory of the source repository. Run them with `cargo run --example basic_query`.
+</Tip>
+
+## Configuration Management
+
+### Update Configuration Files
+
+Download the latest bootstrap configuration from GitHub:
+
+```bash
+rdap --update
+```
+
+This updates:
+- `config.json` - Bootstrap URLs
+- `tlds.json` - TLD overrides  
+- `tlds.txt` - IANA TLD list
+
+<Note>
+Your local override files (`*.local.json`) are never touched by updates.
+</Note>
+
+### Configuration Priority
+
+RDAP loads configuration in this order (highest priority first):
+
+<Steps>
+  <Step title="Local Overrides">
+    `~/.config/rdap/*.local.json` - Your custom settings (never overwritten)
+  </Step>
+  <Step title="User Config">
+    `~/.config/rdap/*.json` - Downloaded via `--update`
+  </Step>
+  <Step title="System Config">
+    `/etc/rdap/*.json` - System-wide configuration
+  </Step>
+  <Step title="Built-in Defaults">
+    Embedded in the binary - always available
+  </Step>
+</Steps>
+
+### Custom TLD Overrides
+
+Create `~/.config/rdap/tlds.local.json` to add your own TLD overrides:
+
+```json ~/.config/rdap/tlds.local.json
+{
+  "example": "https://rdap.example.com/",
+  "co.example": "https://rdap.co.example.com/"
+}
+```
+
+## Common Patterns
+
+### Check Domain Expiration
+
+```bash
+rdap -f json example.com | jq '.events[] | select(.action=="expiration") | .date'
+```
+
+### Find Abuse Contact
+
+```bash
+# For IP addresses (shown at top of output)
+rdap 8.8.8.8 | head -n 3
+
+# For AS numbers
+rdap AS15169 | head -n 3
+
+# Extract from JSON
+rdap -f json 8.8.8.8 | jq '.entities[] | select(.roles[] | contains("abuse"))'
+```
+
+### Batch Queries
+
+Query multiple resources:
+
+```bash
+# Simple loop
+for domain in example.com google.com github.com; do
+  echo "=== $domain ==="
+  rdap $domain
+  echo
+done
+
+# From a file
+while read -r query; do
+  rdap -f json "$query" >> results.json
+done < queries.txt
+```
+
+### Monitor Domain Status
+
+```bash
+# Check if domain is locked
+rdap -f json example.com | jq '.status[] | select(contains("lock"))'
+
+# Get all status values
+rdap -f json example.com | jq '.status[]'
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Reference" icon="terminal" href="/cli/basic-queries">
+    Complete reference for all command-line options and flags
+  </Card>
+  <Card title="Library API" icon="code" href="/library/getting-started">
+    Full API documentation for using RDAP as a Rust library
+  </Card>
+  <Card title="Configuration" icon="gear" href="/cli/configuration">
+    Learn about configuration files, overrides, and customization
+  </Card>
+  <Card title="Examples" icon="book" href="/library/examples">
+    More examples and use cases for common tasks
+  </Card>
+</CardGroup>

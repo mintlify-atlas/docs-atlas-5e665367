@@ -1,0 +1,531 @@
+---
+title: Error Handling
+description: Handle errors and edge cases in RDAP queries
+---
+
+The RDAP library uses Rust's `Result` type for error handling, with comprehensive error variants for different failure scenarios.
+
+## RdapError Enum
+
+All errors are represented by the `RdapError` enum:
+
+```rust
+pub enum RdapError {
+    Http(reqwest::Error),
+    Json(serde_json::Error),
+    Io(std::io::Error),
+    Bootstrap(String),
+    InvalidQuery(String),
+    NotFound,
+    NoWorkingServers,
+    ServerError {
+        code: u16,
+        title: String,
+        description: Vec<String>,
+    },
+    InvalidUrl(url::ParseError),
+    Timeout,
+    Cache(String),
+    Other(String),
+}
+```
+
+**Source reference:** `src/error.rs:7`
+
+## Error Variants
+
+### Http
+
+HTTP request failures (network errors, connection timeouts, etc.):
+
+```rust
+use rdap::{RdapClient, RdapRequest, RdapError, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+
+match client.query(&request).await {
+    Err(RdapError::Http(err)) => {
+        eprintln!("Network error: {}", err);
+        if err.is_timeout() {
+            eprintln!("Request timed out");
+        } else if err.is_connect() {
+            eprintln!("Connection failed");
+        }
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:9`
+
+### Json
+
+JSON parsing errors when the server returns invalid or unexpected JSON:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::Json(err)) => {
+        eprintln!("Failed to parse RDAP response: {}", err);
+        eprintln!("The server may have returned invalid JSON");
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:12`
+
+### Io
+
+File I/O errors (cache access, config file reading):
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::Io(err)) => {
+        eprintln!("I/O error: {}", err);
+        eprintln!("Check file permissions and disk space");
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:15`
+
+### Bootstrap
+
+Bootstrap service discovery failures:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::Bootstrap(msg)) => {
+        eprintln!("Bootstrap error: {}", msg);
+        eprintln!("Could not find RDAP server for this query");
+        eprintln!("Try specifying a server manually with .with_server()");
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:18`
+
+### InvalidQuery
+
+Invalid query string:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::InvalidQuery(msg)) => {
+        eprintln!("Invalid query: {}", msg);
+        eprintln!("Check the query format and try again");
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:21`
+
+### NotFound
+
+Resource not found (HTTP 404):
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::NotFound) => {
+        eprintln!("Object not found");
+        eprintln!("The requested resource does not exist");
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:24`
+
+### NoWorkingServers
+
+All RDAP servers failed:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::NoWorkingServers) => {
+        eprintln!("No working RDAP servers found");
+        eprintln!("All configured servers failed to respond");
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:27`
+
+### ServerError
+
+RDAP server returned an error response:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::ServerError { code, title, description }) => {
+        eprintln!("Server error {}: {}", code, title);
+        for desc in description {
+            eprintln!("  {}", desc);
+        }
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:30`
+
+### InvalidUrl
+
+URL parsing error:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::InvalidUrl(err)) => {
+        eprintln!("Invalid URL: {}", err);
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:37`
+
+### Timeout
+
+Request timeout:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::Timeout) => {
+        eprintln!("Request timed out");
+        eprintln!("Try increasing the timeout with .with_timeout()");
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:40`
+
+### Cache
+
+Cache-related errors:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::Cache(msg)) => {
+        eprintln!("Cache error: {}", msg);
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:43`
+
+### Other
+
+Miscellaneous errors:
+
+```rust
+match client.query(&request).await {
+    Err(RdapError::Other(msg)) => {
+        eprintln!("Error: {}", msg);
+    }
+    Ok(result) => println!("Success: {:?}", result),
+    Err(e) => eprintln!("Other error: {}", e),
+}
+```
+
+**Source reference:** `src/error.rs:46`
+
+## Complete Error Handling Example
+
+Here's a comprehensive example handling all error types:
+
+```rust
+use rdap::{RdapClient, RdapRequest, RdapError, RdapObject};
+
+#[tokio::main]
+async fn main() {
+    let client = RdapClient::new().unwrap();
+
+    let queries = vec![
+        ("nonexistent-domain-12345.com", rdap::QueryType::Domain),
+        ("999.999.999.999", rdap::QueryType::Ip),
+        ("AS99999999", rdap::QueryType::Autnum),
+    ];
+
+    for (query, query_type) in queries {
+        println!("\n=== Querying: {} ===", query);
+
+        let request = RdapRequest::new(query_type, query);
+
+        match client.query(&request).await {
+            Ok(result) => {
+                // Check if it's an error response from the RDAP server
+                match result {
+                    RdapObject::Error(err) => {
+                        println!("❌ RDAP Error Response:");
+                        if let Some(code) = err.error_code {
+                            println!("   Code: {}", code);
+                        }
+                        if let Some(title) = &err.title {
+                            println!("   Title: {}", title);
+                        }
+                        for desc in &err.description {
+                            println!("   Description: {}", desc);
+                        }
+                    }
+                    _ => {
+                        println!("✅ Query successful");
+                    }
+                }
+            }
+            Err(e) => {
+                println!("❌ Client Error:");
+                match e {
+                    RdapError::Bootstrap(msg) => {
+                        println!("   Bootstrap error: {}", msg);
+                        println!("   (Try specifying a server with -s option)");
+                    }
+                    RdapError::Http(err) => {
+                        println!("   HTTP error: {}", err);
+                    }
+                    RdapError::InvalidQuery(msg) => {
+                        println!("   Invalid query: {}", msg);
+                    }
+                    RdapError::Json(err) => {
+                        println!("   JSON parse error: {}", err);
+                    }
+                    RdapError::InvalidUrl(err) => {
+                        println!("   URL error: {}", err);
+                    }
+                    RdapError::Io(err) => {
+                        println!("   I/O error: {}", err);
+                    }
+                    RdapError::NotFound => {
+                        println!("   Object not found (404)");
+                    }
+                    RdapError::NoWorkingServers => {
+                        println!("   No working servers found");
+                    }
+                    RdapError::ServerError { code, title, description } => {
+                        println!("   Server error {}: {}", code, title);
+                        for desc in description {
+                            println!("     {}", desc);
+                        }
+                    }
+                    RdapError::Timeout => {
+                        println!("   Request timed out");
+                    }
+                    RdapError::Cache(msg) => {
+                        println!("   Cache error: {}", msg);
+                    }
+                    RdapError::Other(msg) => {
+                        println!("   Other error: {}", msg);
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+**Source reference:** `examples/error_handling.rs`
+
+## RDAP Error Responses
+
+Some RDAP servers return error information as part of a successful HTTP response. These are represented as `RdapObject::Error`:
+
+```rust
+use rdap::{RdapClient, RdapRequest, RdapObject};
+
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::Error(err) => {
+        println!("RDAP server returned an error:");
+        
+        if let Some(code) = err.error_code {
+            println!("Error code: {}", code);
+        }
+        
+        if let Some(title) = &err.title {
+            println!("Title: {}", title);
+        }
+        
+        for desc in &err.description {
+            println!("Description: {}", desc);
+        }
+    }
+    _ => {
+        // Process successful result
+    }
+}
+```
+
+**Error response type:**
+
+```rust
+pub struct ErrorResponse {
+    pub error_code: Option<u16>,
+    pub title: Option<String>,
+    pub description: Vec<String>,
+    pub lang: Option<String>,
+    pub notices: Vec<Notice>,
+}
+```
+
+**Source reference:** `src/models/error.rs`
+
+## Result Type Alias
+
+The library provides a `Result` type alias for convenience:
+
+```rust
+pub type Result<T> = std::result::Result<T, RdapError>;
+```
+
+Use it in your functions:
+
+```rust
+use rdap::{Result, RdapClient, RdapObject};
+
+async fn query_domain(domain: &str) -> Result<RdapObject> {
+    let client = RdapClient::new()?;
+    let query_type = rdap::RdapRequest::detect_type(domain)?;
+    let request = rdap::RdapRequest::new(query_type, domain);
+    client.query(&request).await
+}
+```
+
+**Source reference:** `src/error.rs:5`
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Pattern Matching">
+    Match on specific error variants to provide helpful error messages:
+
+    ```rust
+    match client.query(&request).await {
+        Ok(result) => { /* handle success */ }
+        Err(RdapError::NotFound) => {
+            println!("Domain not found");
+        }
+        Err(RdapError::Bootstrap(msg)) => {
+            eprintln!("Bootstrap failed: {}", msg);
+        }
+        Err(e) => {
+            eprintln!("Unexpected error: {}", e);
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Handle Both Error Types">
+    Remember to check for both `Err()` results and `RdapObject::Error` responses:
+
+    ```rust
+    match client.query(&request).await {
+        Ok(RdapObject::Error(err)) => {
+            // Server returned an error response
+        }
+        Ok(result) => {
+            // Success
+        }
+        Err(e) => {
+            // Client-side error
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Provide Context">
+    Add context to errors when propagating them:
+
+    ```rust
+    client.query(&request)
+        .await
+        .map_err(|e| format!("Failed to query {}: {}", query, e))?;
+    ```
+  </Step>
+
+  <Step title="Set Appropriate Timeouts">
+    Configure reasonable timeouts for your use case:
+
+    ```rust
+    use std::time::Duration;
+
+    let client = RdapClient::new()?
+        .with_timeout(Duration::from_secs(10));
+    ```
+  </Step>
+
+  <Step title="Retry Logic">
+    Implement retry logic for transient failures:
+
+    ```rust
+    use tokio::time::{sleep, Duration};
+
+    let max_retries = 3;
+    for attempt in 1..=max_retries {
+        match client.query(&request).await {
+            Ok(result) => return Ok(result),
+            Err(RdapError::Http(_)) if attempt < max_retries => {
+                eprintln!("Retry {} of {}", attempt, max_retries);
+                sleep(Duration::from_secs(2)).await;
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Error Display
+
+All errors implement the `Display` trait for user-friendly messages:
+
+```rust
+if let Err(e) = client.query(&request).await {
+    eprintln!("Error: {}", e);
+}
+```
+
+Error messages:
+
+- `Http`: "HTTP request failed: {error}"
+- `Json`: "JSON parsing failed: {error}"
+- `Io`: "IO error: {error}"
+- `Bootstrap`: "Bootstrap error: {message}"
+- `InvalidQuery`: "Invalid query: {message}"
+- `NotFound`: "Object not found (404)"
+- `NoWorkingServers`: "No working RDAP servers found"
+- `ServerError`: "RDAP server error {code}: {title}"
+- `InvalidUrl`: "Invalid URL: {error}"
+- `Timeout`: "Timeout"
+- `Cache`: "Cache error: {message}"
+- `Other`: "{message}"
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Examples" icon="book" href="/library/examples">
+    See complete working examples
+  </Card>
+  
+  <Card title="Getting Started" icon="rocket" href="/library/getting-started">
+    Back to getting started guide
+  </Card>
+</CardGroup>

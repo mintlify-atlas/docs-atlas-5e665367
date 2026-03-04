@@ -1,0 +1,263 @@
+---
+title: RdapClient
+description: Main RDAP client for executing queries and fetching RDAP data
+---
+
+## Overview
+
+The `RdapClient` is the primary interface for executing RDAP queries. It handles HTTP requests, server discovery via bootstrap, response parsing, and automatic registrar referral following for multi-layer RDAP queries.
+
+## Constructor
+
+### new()
+
+Create a new RDAP client with default configuration.
+
+```rust
+pub fn new() -> Result<Self>
+```
+
+<ResponseField name="Result<RdapClient>" type="Result">
+  Returns a configured RDAP client or an error if initialization fails.
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::RdapClient;
+
+let client = RdapClient::new()?;
+```
+
+The default client includes:
+- 30 second timeout
+- User agent: `rdap-rust/{version}`
+- Registrar referral following enabled
+- Bootstrap client initialized
+
+## Configuration Methods
+
+### with_timeout()
+
+Set a custom timeout duration for HTTP requests.
+
+```rust
+pub const fn with_timeout(self, timeout: Duration) -> Self
+```
+
+<ParamField path="timeout" type="Duration" required>
+  The timeout duration for HTTP requests
+</ParamField>
+
+<ResponseField name="RdapClient" type="RdapClient">
+  Returns self for method chaining
+</ResponseField>
+
+**Example:**
+
+```rust
+use std::time::Duration;
+use rdap::RdapClient;
+
+let client = RdapClient::new()?
+    .with_timeout(Duration::from_secs(60));
+```
+
+### with_follow_referral()
+
+Enable or disable automatic registrar referral following for domain queries.
+
+```rust
+pub const fn with_follow_referral(self, follow: bool) -> Self
+```
+
+<ParamField path="follow" type="bool" required>
+  Whether to follow registrar referral links (default: true)
+</ParamField>
+
+<ResponseField name="RdapClient" type="RdapClient">
+  Returns self for method chaining
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::RdapClient;
+
+let client = RdapClient::new()?
+    .with_follow_referral(false);
+```
+
+## Query Methods
+
+### query()
+
+Execute an RDAP query and return a single result object. If registrar data is available, it returns the registrar object; otherwise, it returns the registry object.
+
+```rust
+pub async fn query(&self, request: &RdapRequest) -> Result<RdapObject>
+```
+
+<ParamField path="request" type="&RdapRequest" required>
+  The RDAP request to execute
+</ParamField>
+
+<ResponseField name="Result<RdapObject>" type="Result">
+  Returns the RDAP response object (preferring registrar data if available)
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::Domain(domain) => {
+        println!("Domain: {:?}", domain.ldh_name);
+    }
+    _ => println!("Unexpected object type"),
+}
+```
+
+### query_with_referral()
+
+Execute an RDAP query with full registrar referral support. Returns both registry and registrar data if available.
+
+```rust
+pub async fn query_with_referral(&self, request: &RdapRequest) -> Result<RdapQueryResult>
+```
+
+<ParamField path="request" type="&RdapRequest" required>
+  The RDAP request to execute
+</ParamField>
+
+<ResponseField name="Result<RdapQueryResult>" type="Result">
+  Returns a query result containing registry data, optional registrar data, and server URLs
+</ResponseField>
+
+**RdapQueryResult Structure:**
+
+<ResponseField name="registry" type="RdapObject">
+  Primary result from the registry RDAP server
+</ResponseField>
+
+<ResponseField name="registry_url" type="Url">
+  URL of the registry RDAP server used
+</ResponseField>
+
+<ResponseField name="registrar" type="Option<RdapObject>">
+  Optional result from the registrar RDAP server (for domain queries)
+</ResponseField>
+
+<ResponseField name="registrar_url" type="Option<Url>">
+  URL of the registrar RDAP server used (if any)
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let result = client.query_with_referral(&request).await?;
+
+println!("Registry: {:?}", result.registry);
+println!("Registry URL: {}", result.registry_url);
+
+if let Some(registrar) = result.registrar {
+    println!("Registrar: {:?}", registrar);
+    println!("Registrar URL: {:?}", result.registrar_url);
+}
+```
+
+### fetch_rdap()
+
+Fetch RDAP data directly from a specific URL without bootstrap discovery.
+
+```rust
+pub async fn fetch_rdap(&self, url: &Url) -> Result<RdapObject>
+```
+
+<ParamField path="url" type="&Url" required>
+  The full RDAP server URL to query
+</ParamField>
+
+<ResponseField name="Result<RdapObject>" type="Result">
+  Returns the parsed RDAP response object
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::RdapClient;
+use url::Url;
+
+let client = RdapClient::new()?;
+let url = Url::parse("https://rdap.verisign.com/com/v1/domain/example.com")?;
+let result = client.fetch_rdap(&url).await?;
+
+match result {
+    RdapObject::Domain(domain) => {
+        println!("Domain: {:?}", domain.ldh_name);
+    }
+    _ => println!("Unexpected object type"),
+}
+```
+
+## Special Features
+
+### IPv6 CIDR Fallback
+
+The client automatically retries IPv6 host queries with CIDR notation if the initial query returns a 400 error. This handles RDAP servers that don't support host-level IPv6 queries.
+
+Retry sequence for failed IPv6 queries:
+1. Original host query (e.g., `2001:db8::1`)
+2. /64 CIDR query (e.g., `2001:db8::/64`)
+3. /48 CIDR query (e.g., `2001:db8::/48`)
+4. /32 CIDR query (e.g., `2001:db8::/32`)
+
+### Registrar Referral Following
+
+For domain queries, the client automatically:
+1. Queries the registry RDAP server
+2. Checks for registrar referral links in the response
+3. Follows the referral to fetch detailed registrar data
+4. Skips referrals that point to the same server
+5. Falls back to registry-only data if registrar query fails
+
+This behavior is enabled by default and can be controlled with `with_follow_referral()`.
+
+## Error Handling
+
+The client returns `Result<T>` types with the following error variants:
+
+- **NotFound**: HTTP 404 - Object not found
+- **ServerError**: HTTP error with code, title, and optional description
+- **Bootstrap**: Bootstrap service errors
+- **NoWorkingServers**: All server attempts failed
+- **Json**: JSON parsing errors
+- **Http**: Network/HTTP errors
+- **Other**: General errors
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapError};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "nonexistent.example");
+
+match client.query(&request).await {
+    Ok(result) => println!("Success: {:?}", result),
+    Err(RdapError::NotFound) => println!("Domain not found"),
+    Err(RdapError::ServerError { code, title, description }) => {
+        println!("Server error {}: {} - {:?}", code, title, description);
+    }
+    Err(e) => println!("Error: {}", e),
+}
+```

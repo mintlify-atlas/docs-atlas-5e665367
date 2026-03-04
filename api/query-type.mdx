@@ -1,0 +1,375 @@
+---
+title: QueryType
+description: Enumeration of all RDAP query types
+---
+
+## Overview
+
+The `QueryType` enum defines all supported RDAP query types according to RFCs 7480-7484. It determines how the query is constructed and which RDAP endpoint is used.
+
+## Definition
+
+```rust
+pub enum QueryType {
+    Domain,
+    Tld,
+    Ip,
+    Autnum,
+    Entity,
+    Nameserver,
+    Help,
+    DomainSearch,
+    DomainSearchByNameserver,
+    DomainSearchByNameserverIp,
+    NameserverSearch,
+    NameserverSearchByIp,
+    EntitySearch,
+    EntitySearchByHandle,
+}
+```
+
+## Object Lookup Queries
+
+### Domain
+
+Query for domain name registration information.
+
+**Endpoint Pattern:** `/domain/{domain-name}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let result = client.query(&request).await?;
+```
+
+**Query Examples:**
+- `example.com`
+- `subdomain.example.org`
+- `xn--e1afmkfd.xn--p1ai` (IDN/punycode)
+
+### Tld
+
+Query for top-level domain information from IANA.
+
+**Endpoint Pattern:** `/domain/{tld}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Tld, "com");
+let result = client.query(&request).await?;
+```
+
+**Query Examples:**
+- `com`
+- `org`
+- `google` (brand TLD)
+- `au` (ccTLD)
+
+### Ip
+
+Query for IP address or network registration information.
+
+**Endpoint Pattern:** `/ip/{ip-address-or-cidr}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Ip, "8.8.8.8");
+let result = client.query(&request).await?;
+```
+
+**Query Examples:**
+- `8.8.8.8` (IPv4 address)
+- `192.0.2.0/24` (IPv4 CIDR)
+- `2001:db8::1` (IPv6 address)
+- `2001:db8::/32` (IPv6 CIDR)
+
+**Note:** The client automatically retries failed IPv6 host queries with CIDR notation (/64, /48, /32) for servers that don't support host-level queries.
+
+### Autnum
+
+Query for Autonomous System Number information.
+
+**Endpoint Pattern:** `/autnum/{asn}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+let result = client.query(&request).await?;
+```
+
+**Query Examples:**
+- `AS15169` (with "AS" prefix)
+- `15169` (without prefix)
+- `AS64512` (private ASN)
+
+**Note:** The "AS" prefix is automatically stripped when building the URL.
+
+### Entity
+
+Query for entity (organization, person, contact) information.
+
+**Endpoint Pattern:** `/entity/{entity-handle}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Entity, "ENTITY-123");
+let result = client.query(&request).await?;
+```
+
+**Query Examples:**
+- `ENTITY-123`
+- `GOOGLE-ARIN`
+- `ORG-EXAMPLE1-RIPE`
+
+### Nameserver
+
+Query for nameserver information.
+
+**Endpoint Pattern:** `/nameserver/{nameserver-name}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Nameserver, "ns1.example.com");
+let result = client.query(&request).await?;
+```
+
+**Query Examples:**
+- `ns1.example.com`
+- `a.iana-servers.net`
+
+### Help
+
+Query for RDAP server help information.
+
+**Endpoint Pattern:** `/help`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Help, "")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+```
+
+## Search Queries
+
+### DomainSearch
+
+Search for domains by name pattern.
+
+**Endpoint Pattern:** `/domains?name={pattern}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::DomainSearch, "example*")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::DomainSearch(search) => {
+        for domain in search.domains {
+            println!("Found: {:?}", domain.ldh_name);
+        }
+    }
+    _ => {}
+}
+```
+
+**Query Examples:**
+- `example*` (prefix search)
+- `*example*` (contains search, if supported)
+
+### DomainSearchByNameserver
+
+Search for domains by nameserver name.
+
+**Endpoint Pattern:** `/domains?nsLdhName={nameserver}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(
+    QueryType::DomainSearchByNameserver,
+    "ns1.example.com"
+);
+let result = client.query(&request).await?;
+```
+
+### DomainSearchByNameserverIp
+
+Search for domains by nameserver IP address.
+
+**Endpoint Pattern:** `/domains?nsIp={ip-address}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(
+    QueryType::DomainSearchByNameserverIp,
+    "8.8.8.8"
+);
+let result = client.query(&request).await?;
+```
+
+### NameserverSearch
+
+Search for nameservers by name pattern.
+
+**Endpoint Pattern:** `/nameservers?name={pattern}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::NameserverSearch, "ns1.example*")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::NameserverSearch(search) => {
+        for ns in search.nameservers {
+            println!("Found: {:?}", ns.ldh_name);
+        }
+    }
+    _ => {}
+}
+```
+
+### NameserverSearchByIp
+
+Search for nameservers by IP address.
+
+**Endpoint Pattern:** `/nameservers?ip={ip-address}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(
+    QueryType::NameserverSearchByIp,
+    "8.8.8.8"
+);
+let result = client.query(&request).await?;
+```
+
+### EntitySearch
+
+Search for entities by full name.
+
+**Endpoint Pattern:** `/entities?fn={name}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::EntitySearch, "Example*")
+    .with_server(Url::parse("https://rdap.arin.net/registry/")?);
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::EntitySearch(search) => {
+        for entity in search.entities {
+            println!("Found: {:?}", entity.handle);
+        }
+    }
+    _ => {}
+}
+```
+
+### EntitySearchByHandle
+
+Search for entities by handle pattern.
+
+**Endpoint Pattern:** `/entities?handle={pattern}`
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(
+    QueryType::EntitySearchByHandle,
+    "ENTITY-*"
+);
+let result = client.query(&request).await?;
+```
+
+## Display Format
+
+The `QueryType` enum implements `Display` for string representation:
+
+```rust
+use rdap::QueryType;
+
+assert_eq!(QueryType::Domain.to_string(), "domain");
+assert_eq!(QueryType::Tld.to_string(), "tld");
+assert_eq!(QueryType::Ip.to_string(), "ip");
+assert_eq!(QueryType::Autnum.to_string(), "autnum");
+assert_eq!(QueryType::DomainSearch.to_string(), "domain-search");
+```
+
+## Notes
+
+### Search Query Support
+
+Not all RDAP servers support all search endpoints. Check the server's help endpoint or documentation for supported search types.
+
+### Wildcard Patterns
+
+Search query wildcard support varies by server:
+- Some servers support `*` prefix matching (`example*`)
+- Some servers support `*` contains matching (`*example*`)
+- Some servers support `*` suffix matching (`*example`)
+- Some servers don't support wildcards at all
+
+### Server Selection
+
+For search queries, you typically need to specify a server with `with_server()` because bootstrap discovery is designed for lookup queries, not searches.

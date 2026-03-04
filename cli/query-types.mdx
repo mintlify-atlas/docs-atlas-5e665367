@@ -1,0 +1,319 @@
+---
+title: Query Types
+description: Understanding RDAP query types and automatic type detection
+---
+
+The RDAP CLI supports multiple query types defined by the RDAP RFCs. The tool can automatically detect the query type from your input, or you can specify it explicitly.
+
+## Auto-Detection
+
+The tool uses intelligent pattern matching to determine query type:
+
+<Steps>
+  <Step title="AS Number Detection">
+    Queries starting with "AS" followed by digits, or pure numeric queries, are detected as AS numbers:
+    - `AS15169` → Autnum query
+    - `15169` → Autnum query
+  </Step>
+  
+  <Step title="IP Address Detection">
+    Queries containing colons (IPv6) or matching IPv4 patterns are detected as IP queries:
+    - `8.8.8.8` → IP query
+    - `2001:db8::1` → IP query
+    - `1.1` → IP query (normalized to `1.0.0.1`)
+    - `8.8.8.0/24` → IP query (CIDR notation)
+  </Step>
+  
+  <Step title="TLD Detection">
+    Single-word queries matching the IANA TLD list are detected as TLD queries:
+    - `google` → TLD query (queries .google TLD)
+    - `com` → TLD query (queries .com TLD)
+    - `io` → TLD query (queries .io TLD)
+  </Step>
+  
+  <Step title="Domain Fallback">
+    Everything else defaults to domain queries:
+    - `example.com` → Domain query
+    - `google.com` → Domain query
+  </Step>
+</Steps>
+
+<Note>
+The TLD detection uses the official IANA TLD list (`tlds.txt`) which is updated via `rdap --update`.
+</Note>
+
+## Lookup Query Types
+
+These query types retrieve a single object from the RDAP server.
+
+### Domain
+
+Query domain name registration information.
+
+```bash
+# Auto-detected
+rdap example.com
+
+# Explicit type
+rdap -t domain example.com
+```
+
+**Returns:** Domain object with nameservers, status, registrar, dates, and entities
+
+**Special behavior:** Automatically follows registrar referrals for multi-layer RDAP data
+
+### TLD (Top-Level Domain)
+
+Query TLD information from IANA.
+
+```bash
+# Auto-detected
+rdap google
+rdap com
+
+# Explicit type
+rdap -t tld io
+```
+
+**Returns:** Domain object from IANA RDAP with TLD delegation information
+
+**Server:** Always queries `https://rdap.iana.org/`
+
+### IP Address
+
+Query IP address or network information.
+
+```bash
+# IPv4
+rdap 8.8.8.8
+rdap 8.8.8.0/24
+
+# IPv6
+rdap 2001:db8::1
+rdap 2001:db8::/32
+
+# Shorthand (auto-normalized)
+rdap 1.1          # → 1.0.0.1
+rdap 1.2.3        # → 1.2.0.3
+
+# Explicit type
+rdap -t ip 192.0.2.1
+```
+
+**Returns:** IP Network object with address range, type, country, and abuse contact
+
+**Normalization:** Shorthand IPs are automatically expanded (e.g., `1.1` → `1.0.0.1`)
+
+<CodeGroup>
+```bash Standard Format
+rdap 8.8.8.8
+```
+
+```bash CIDR Format
+rdap 8.8.8.0/24
+```
+
+```bash Shorthand Format
+rdap 1.1
+# Queries 1.0.0.1
+```
+</CodeGroup>
+
+### Autnum (AS Number)
+
+Query Autonomous System number information.
+
+```bash
+# With AS prefix
+rdap AS15169
+
+# Without AS prefix
+rdap 15169
+
+# Explicit type
+rdap -t autnum 8888
+```
+
+**Returns:** Autnum object with AS number, name, type, country, and abuse contact
+
+**Format:** Accepts with or without "AS" prefix
+
+### Entity
+
+Query entity (organization, person, contact) information.
+
+```bash
+# Requires explicit server
+rdap -s https://rdap.db.ripe.net -t entity XTOM-RIPE
+```
+
+**Returns:** Entity object with contact information (vCard), roles, and handles
+
+<Warning>
+Entity queries typically require specifying the RDAP server with `-s` since there's no global bootstrap for entities.
+</Warning>
+
+### Nameserver
+
+Query nameserver information.
+
+```bash
+# Requires explicit server
+rdap -s https://rdap.verisign.com/com/v1 -t nameserver ns1.google.com
+```
+
+**Returns:** Nameserver object with hostname and IP addresses
+
+## Search Query Types
+
+Search queries return multiple matching objects. These require explicit type specification.
+
+### Domain Search
+
+Search for domains by name pattern.
+
+```bash
+rdap -s https://rdap.example.com -t domain-search "example*"
+```
+
+**Endpoint:** `GET /domains?name={pattern}`
+
+### Domain Search by Nameserver
+
+Find domains using a specific nameserver.
+
+```bash
+rdap -s https://rdap.example.com -t domain-search-by-nameserver ns1.example.com
+```
+
+**Endpoint:** `GET /domains?nsLdhName={nameserver}`
+
+### Domain Search by Nameserver IP
+
+Find domains whose nameservers use a specific IP.
+
+```bash
+rdap -s https://rdap.example.com -t domain-search-by-nameserver-ip 192.0.2.1
+```
+
+**Endpoint:** `GET /domains?nsIp={ip}`
+
+### Nameserver Search
+
+Search for nameservers by name pattern.
+
+```bash
+rdap -s https://rdap.example.com -t nameserver-search "ns*.example.com"
+```
+
+**Endpoint:** `GET /nameservers?name={pattern}`
+
+### Nameserver Search by IP
+
+Find nameservers using a specific IP address.
+
+```bash
+rdap -s https://rdap.example.com -t nameserver-search-by-ip 192.0.2.1
+```
+
+**Endpoint:** `GET /nameservers?ip={ip}`
+
+### Entity Search
+
+Search for entities by name.
+
+```bash
+rdap -s https://rdap.example.com -t entity-search "Example Corp"
+```
+
+**Endpoint:** `GET /entities?fn={name}`
+
+### Entity Search by Handle
+
+Search for entities by handle/identifier.
+
+```bash
+rdap -s https://rdap.example.com -t entity-search-by-handle ABC-123
+```
+
+**Endpoint:** `GET /entities?handle={handle}`
+
+<Warning>
+Search queries are not widely supported by all RDAP servers. Many servers only support direct lookups.
+</Warning>
+
+## Explicit Type Specification
+
+Override auto-detection by specifying the query type:
+
+```bash
+rdap -t domain example.com
+rdap -t ip 8.8.8.8
+rdap -t autnum 15169
+rdap -t tld google
+```
+
+<Tabs>
+  <Tab title="Available Types">
+    - `domain` - Domain name lookup
+    - `tld` - Top-level domain lookup
+    - `ip` - IP address/network lookup
+    - `autnum` - AS number lookup
+    - `entity` - Entity lookup
+    - `nameserver` - Nameserver lookup
+    - `domain-search` - Domain search
+    - `domain-search-by-nameserver` - Domain search by NS
+    - `domain-search-by-nameserver-ip` - Domain search by NS IP
+    - `nameserver-search` - Nameserver search
+    - `nameserver-search-by-ip` - Nameserver search by IP
+    - `entity-search` - Entity search by name
+    - `entity-search-by-handle` - Entity search by handle
+  </Tab>
+  
+  <Tab title="When to Use">
+    Explicit type specification is useful when:
+    - Auto-detection might be ambiguous
+    - You want to force a specific query type
+    - You're using search query types
+    - You're scripting and want predictable behavior
+  </Tab>
+</Tabs>
+
+## Auto-Detection Logic
+
+The detection algorithm (implemented in `src/request.rs:detect_type_with_tld_check`):
+
+```rust
+// Pseudocode
+if query starts with "AS" and rest is digits:
+    return Autnum
+else if query is all digits:
+    return Autnum
+else if query looks like IP (contains : or matches IPv4 pattern):
+    return Ip
+else if query has no dots AND matches IANA TLD list:
+    return Tld
+else:
+    return Domain (default)
+```
+
+## Help Query
+
+Query the RDAP server's help endpoint:
+
+```bash
+rdap -s https://rdap.example.com -t help help
+```
+
+Returns server-specific help information.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Queries" icon="magnifying-glass" href="/cli/basic-queries">
+    Start with basic RDAP queries
+  </Card>
+  <Card title="Output Formats" icon="file-code" href="/cli/output-formats">
+    Learn about JSON and text output
+  </Card>
+</CardGroup>

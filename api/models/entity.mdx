@@ -1,0 +1,275 @@
+---
+title: Entity
+description: Person or organization contact information from RDAP queries
+---
+
+## Entity
+
+Represents a person or organization entity in RDAP responses. Entities can be registrants, technical contacts, administrative contacts, abuse contacts, or registrars.
+
+<ResponseField name="object_class_name" type="string">
+  Always "entity" for entity objects
+</ResponseField>
+
+<ResponseField name="conformance" type="array<string>">
+  RDAP conformance levels (e.g., `["rdap_level_0"]`)
+</ResponseField>
+
+<ResponseField name="notices" type="array<Notice>">
+  Server notices and terms of service. See [common fields](/api/models/domain#notice)
+</ResponseField>
+
+<ResponseField name="handle" type="string">
+  Registry-unique identifier for the entity
+  
+  ```rust
+  let entity_handle = entity.handle.unwrap_or_default();
+  ```
+</ResponseField>
+
+<ResponseField name="vcard" type="VCard">
+  Contact information in jCard format (RFC 7095)
+  
+  <Expandable title="VCard Methods">
+    The VCard object provides convenient accessor methods:
+    
+    ```rust
+    if let Some(vcard) = &entity.vcard {
+        // Get formatted name
+        let name = vcard.name(); // Option<&str>
+        
+        // Get email address
+        let email = vcard.email(); // Option<&str>
+        
+        // Get telephone number
+        let tel = vcard.tel(); // Option<&str>
+        
+        // Get organization
+        let org = vcard.org(); // Option<&str>
+        
+        // Get structured address
+        if let Some(addr) = vcard.address() {
+            println!("Street: {}", addr.street);
+            println!("City: {}", addr.locality);
+            println!("Region: {}", addr.region);
+            println!("Postal: {}", addr.postal_code);
+            println!("Country: {}", addr.country);
+            
+            // Some addresses have a pre-formatted label
+            if let Some(label) = addr.label {
+                println!("Address: {}", label);
+            }
+        }
+        
+        // Access raw properties
+        for prop in vcard.properties() {
+            println!("{}: {:?}", prop.name, prop.value);
+        }
+    }
+    ```
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="roles" type="array<string>">
+  Entity roles in the context where it appears
+  
+  Common roles:
+  - `"registrant"` - Domain/resource owner
+  - `"administrative"` - Administrative contact
+  - `"technical"` - Technical contact
+  - `"abuse"` - Abuse contact
+  - `"billing"` - Billing contact
+  - `"registrar"` - Domain registrar
+  - `"reseller"` - Reseller
+  - `"sponsor"` - Sponsoring organization
+  
+  ```rust
+  if entity.roles.contains(&"abuse".to_string()) {
+      println!("This is an abuse contact");
+  }
+  
+  // Find specific role
+  let is_registrar = entity.roles.iter()
+      .any(|r| r == "registrar");
+  ```
+</ResponseField>
+
+<ResponseField name="public_ids" type="array<PublicId>">
+  Public identifiers (e.g., IANA Registrar ID). See [common fields](/api/models/domain#publicid)
+  
+  ```rust
+  // Find IANA Registrar ID
+  let registrar_id = entity.public_ids.iter()
+      .find(|id| id.id_type == "IANA Registrar ID")
+      .map(|id| &id.identifier);
+  ```
+</ResponseField>
+
+<ResponseField name="entities" type="array<Entity>">
+  Nested entities (e.g., contacts associated with a registrar)
+  
+  ```rust
+  // Recursively process nested entities
+  fn process_entity(entity: &Entity, depth: usize) {
+      let indent = "  ".repeat(depth);
+      println!("{}Entity: {}", indent, entity.handle.as_deref().unwrap_or("N/A"));
+      
+      for child in &entity.entities {
+          process_entity(child, depth + 1);
+      }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="remarks" type="array<Remark>">
+  Informational remarks. See [common fields](/api/models/domain#remark)
+</ResponseField>
+
+<ResponseField name="links" type="array<Link>">
+  Related links. See [common fields](/api/models/domain#link)
+</ResponseField>
+
+<ResponseField name="events" type="array<Event>">
+  Lifecycle events for the entity. See [common fields](/api/models/domain#event)
+</ResponseField>
+
+<ResponseField name="as_event_actor" type="array<Event>">
+  Events where this entity was the actor
+</ResponseField>
+
+<ResponseField name="status" type="array<string>">
+  Entity status values (e.g., "active", "validated")
+</ResponseField>
+
+<ResponseField name="port43" type="string">
+  WHOIS server hostname for port 43 queries
+</ResponseField>
+
+<ResponseField name="networks" type="array<IpNetwork>">
+  IP networks associated with this entity. See [IpNetwork](/api/models/ip-network)
+</ResponseField>
+
+<ResponseField name="autnums" type="array<Autnum>">
+  AS numbers associated with this entity. See [Autnum](/api/models/autnum)
+</ResponseField>
+
+<ResponseField name="lang" type="string">
+  Language tag (e.g., "en", "fr")
+</ResponseField>
+
+## Example Usage
+
+### Finding Contacts in Domain Query
+
+```rust
+use rdap_client::RdapClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new();
+    let result = client.query("example.com").await?;
+    
+    if let Some(domain) = result.domain() {
+        // Find registrar
+        for entity in &domain.entities {
+            if entity.roles.contains(&"registrar".to_string()) {
+                if let Some(vcard) = &entity.vcard {
+                    println!("Registrar: {}", vcard.name().unwrap_or("Unknown"));
+                    
+                    if let Some(email) = vcard.email() {
+                        println!("Email: {}", email);
+                    }
+                }
+                
+                // Get IANA Registrar ID
+                for pid in &entity.public_ids {
+                    if pid.id_type == "IANA Registrar ID" {
+                        println!("Registrar ID: {}", pid.identifier);
+                    }
+                }
+            }
+        }
+        
+        // Find abuse contact
+        for entity in &domain.entities {
+            if entity.roles.contains(&"abuse".to_string()) {
+                if let Some(vcard) = &entity.vcard {
+                    println!("\nAbuse Contact:");
+                    if let Some(email) = vcard.email() {
+                        println!("  Email: {}", email);
+                    }
+                    if let Some(tel) = vcard.tel() {
+                        println!("  Phone: {}", tel);
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### Accessing VCard Information
+
+```rust
+fn display_entity_contact(entity: &Entity) {
+    if let Some(vcard) = &entity.vcard {
+        // Basic contact info
+        if let Some(name) = vcard.name() {
+            println!("Name: {}", name);
+        }
+        
+        if let Some(org) = vcard.org() {
+            println!("Organization: {}", org);
+        }
+        
+        if let Some(email) = vcard.email() {
+            println!("Email: {}", email);
+        }
+        
+        if let Some(tel) = vcard.tel() {
+            println!("Phone: {}", tel);
+        }
+        
+        // Full address
+        if let Some(addr) = vcard.address() {
+            println!("Address:");
+            
+            if let Some(label) = &addr.label {
+                // Use pre-formatted address if available
+                println!("  {}", label);
+            } else {
+                // Build address from components
+                if !addr.street.is_empty() {
+                    println!("  {}", addr.street);
+                }
+                if !addr.locality.is_empty() || !addr.region.is_empty() {
+                    println!("  {}, {}", addr.locality, addr.region);
+                }
+                if !addr.postal_code.is_empty() {
+                    println!("  {}", addr.postal_code);
+                }
+                if !addr.country.is_empty() {
+                    println!("  {}", addr.country);
+                }
+            }
+        }
+    }
+}
+```
+
+### Finding Entities by Role
+
+```rust
+fn find_entities_by_role<'a>(
+    entities: &'a [Entity],
+    role: &str
+) -> impl Iterator<Item = &'a Entity> {
+    entities.iter().filter(move |e| e.roles.contains(&role.to_string()))
+}
+
+// Usage
+let registrars: Vec<_> = find_entities_by_role(&domain.entities, "registrar").collect();
+let abuse_contacts: Vec<_> = find_entities_by_role(&domain.entities, "abuse").collect();
+```

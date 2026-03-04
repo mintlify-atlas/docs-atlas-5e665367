@@ -1,0 +1,189 @@
+---
+title: Introduction
+description: A modern RDAP client written in Rust for querying domain, IP, ASN, and network registration data
+---
+
+# Introduction to RDAP
+
+RDAP (Registration Data Access Protocol) is the modern successor to WHOIS, providing structured access to domain name, IP address, and autonomous system registration information. This Rust implementation offers both a powerful CLI tool and a flexible library for programmatic access.
+
+## What is RDAP?
+
+RDAP is a standardized protocol (RFC 7480-7484) that provides:
+
+- **Structured JSON responses** instead of unformatted text
+- **RESTful HTTP API** with consistent query patterns
+- **Internationalization support** for non-ASCII domain names
+- **Authentication and access control** capabilities
+- **Standardized data models** across all registries
+
+<Note>
+RDAP replaces the traditional WHOIS protocol with a modern, RESTful approach that's easier to parse and more consistent across different registries.
+</Note>
+
+## What This Tool Does
+
+This RDAP client provides elegant access to registration data for:
+
+<CardGroup cols={2}>
+  <Card title="Domains" icon="globe">
+    Query registration details for any domain name, including registrant information, nameservers, and DNSSEC status
+  </Card>
+  <Card title="TLDs" icon="server">
+    Look up top-level domain information directly from IANA, including administrative and technical contacts
+  </Card>
+  <Card title="IP Addresses" icon="network-wired">
+    Query both IPv4 and IPv6 addresses with CIDR support to find allocation details and abuse contacts
+  </Card>
+  <Card title="AS Numbers" icon="route">
+    Look up autonomous system information including name, type, and routing contacts
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Modern & Fast
+
+- **Asynchronous I/O** powered by Tokio for high performance
+- **Efficient HTTP client** with connection pooling via reqwest
+- **Fast JSON parsing** using Serde for type-safe deserialization
+- **Small binary size** (~4MB stripped)
+
+### Beautiful Output
+
+```bash
+$ rdap google.com
+
+Abuse contact for `google.com` is `abusecomplaints@markmonitor.com`
+
+Query from https://rdap.verisign.com/com/v1/domain/google.com
+
+Domain Name: GOOGLE.COM
+Handle: 2138514_DOMAIN_COM-VRSN
+Status: client delete prohibited
+Status: client transfer prohibited
+Nameserver: NS1.GOOGLE.COM
+Registration: 1997-09-15T04:00:00Z
+Expiration: 2028-09-14T04:00:00Z
+```
+
+<Tip>
+The tool automatically displays abuse contacts at the top of results for domains, IPs, and AS numbers, making it easy to report issues.
+</Tip>
+
+### Full RDAP Support
+
+- Domain name queries with multi-layer support (registry + registrar)
+- TLD queries for top-level domain information
+- IPv4 and IPv6 address queries
+- CIDR network range queries (e.g., `8.8.8.0/24`)
+- AS number queries (with or without "AS" prefix)
+- Entity (contact) queries
+- Nameserver queries
+- Search queries for domains, entities, and nameservers
+
+### Smart Features
+
+<Steps>
+  <Step title="Auto-Detection">
+    Query type is automatically detected - just type `rdap 8.8.8.8` and the tool knows it's an IP address
+  </Step>
+  <Step title="Bootstrap Discovery">
+    Automatically finds the authoritative RDAP server using IANA's bootstrap service
+  </Step>
+  <Step title="Multi-Layer Queries">
+    For domains, automatically follows referrals from registry to registrar for complete information
+  </Step>
+  <Step title="Smart Normalization">
+    IP shorthand like `1.1` is automatically expanded to `1.0.0.1`
+  </Step>
+</Steps>
+
+### Configuration & Customization
+
+- **Zero-config usage** with built-in defaults embedded in the binary
+- **TLD overrides** for ccTLDs not in IANA bootstrap
+- **Custom RDAP servers** via command-line flag
+- **Local override files** (`*.local.json`) that survive updates
+- **Update command** to fetch latest configs from GitHub
+
+```bash
+# Update configuration files from GitHub
+rdap --update
+```
+
+<Note>
+Configuration files are loaded with priority: local overrides → user config → system config → built-in defaults
+</Note>
+
+## Use Cases
+
+### Network Operations
+
+- Investigate network abuse by quickly finding abuse contacts
+- Verify IP allocation and ownership
+- Check AS number routing information
+
+### Domain Management
+
+- Monitor domain expiration dates
+- Verify nameserver configurations
+- Check DNSSEC status
+- Audit registrar information
+
+### Security Research
+
+- Investigate suspicious domains or IPs
+- Track infrastructure ownership
+- Correlate registration data across resources
+
+### Automation & Integration
+
+- Use as a Rust library in your applications
+- Parse JSON output for pipeline integration
+- Build custom tools on top of the RDAP API
+
+## Architecture Overview
+
+The project is structured as both a library (`rdap` crate) and a CLI tool:
+
+```
+src/
+├── lib.rs           # Library entry point, public API
+├── main.rs          # CLI entry point with clap
+├── client.rs        # RdapClient - main query orchestration
+├── request.rs       # RdapRequest and QueryType
+├── bootstrap.rs     # IANA bootstrap service discovery
+├── config.rs        # Configuration management
+├── display.rs       # Colored terminal output
+├── cache.rs         # Bootstrap file caching
+├── ip.rs            # IP normalization and CIDR handling
+└── models/          # RDAP data models
+    ├── domain.rs
+    ├── entity.rs
+    ├── autnum.rs
+    ├── ip_network.rs
+    └── ...
+```
+
+## RFC Compliance
+
+This implementation follows official RDAP specifications:
+
+- [RFC 7480](https://tools.ietf.org/html/rfc7480) - HTTP Usage in RDAP
+- [RFC 7482](https://tools.ietf.org/html/rfc7482) - RDAP Query Format
+- [RFC 7483](https://tools.ietf.org/html/rfc7483) - JSON Responses for RDAP
+- [RFC 7484](https://tools.ietf.org/html/rfc7484) - Finding the Authoritative RDAP Service
+- [RFC 6350](https://tools.ietf.org/html/rfc6350) - vCard Format
+- [RFC 7095](https://tools.ietf.org/html/rfc7095) - jCard (JSON representation of vCard)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the RDAP client using apt, brew, cargo, or from source
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get started with your first RDAP query in under 2 minutes
+  </Card>
+</CardGroup>

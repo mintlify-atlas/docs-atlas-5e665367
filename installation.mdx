@@ -1,0 +1,295 @@
+---
+title: Installation
+description: Install the RDAP client on Linux, macOS, or build from source
+---
+
+# Installation
+
+The RDAP client is available through multiple package managers and can also be built from source. Choose the method that works best for your platform.
+
+## Quick Install
+
+<Tabs>
+  <Tab title="Debian/Ubuntu">
+    Install using extrepo (recommended):
+    ```bash
+    sudo apt update && sudo apt install extrepo -y
+    sudo extrepo enable xtom
+    sudo apt update && sudo apt install rdap -y
+    ```
+  </Tab>
+  <Tab title="macOS">
+    Install using Homebrew:
+    ```bash
+    brew tap xtomcom/brew
+    brew install xtomcom/brew/rdap
+    ```
+  </Tab>
+  <Tab title="Cargo">
+    Install from source using Cargo:
+    ```bash
+    cargo install --git https://github.com/xtomcom/rdap.git
+    ```
+  </Tab>
+</Tabs>
+
+## Platform-Specific Instructions
+
+### Debian / Ubuntu
+
+<Steps>
+  <Step title="Using extrepo (Easiest)">
+    This is the simplest method for Debian-based systems:
+    
+    ```bash
+    sudo apt update && sudo apt install extrepo -y
+    sudo extrepo enable xtom
+    sudo apt update && sudo apt install rdap -y
+    ```
+  </Step>
+  
+  <Step title="Manual Repository Setup (One-Line)">
+    If you prefer to add the repository manually:
+    
+    ```bash
+    sudo apt install -y lsb-release ca-certificates apt-transport-https curl gnupg dpkg
+    # Add xTom repository
+    curl -fsSL https://repo.xtom.com/xtom.key | bash -c 'gpg --dearmor > /usr/share/keyrings/xtom.gpg'
+    echo "deb [signed-by=/usr/share/keyrings/xtom.gpg] https://repo.xtom.com/deb stable main" | sudo tee /etc/apt/sources.list.d/xtom.list
+    sudo apt update
+    sudo apt install rdap
+    ```
+  </Step>
+  
+  <Step title="DEB822 Format">
+    For modern Debian/Ubuntu systems using DEB822 format:
+    
+    ```bash
+    sudo apt install -y lsb-release ca-certificates apt-transport-https curl gnupg dpkg
+    curl -fsSL https://repo.xtom.com/xtom.key | bash -c 'gpg --dearmor > /usr/share/keyrings/xtom.gpg'
+    sudo bash -c 'cat > /etc/apt/sources.list.d/xtom.sources << EOF
+    Components: main
+    Architectures: $(dpkg --print-architecture)
+    Suites: stable
+    Types: deb
+    Uris: https://repo.xtom.com/deb
+    Signed-By: /usr/share/keyrings/xtom.gpg
+    EOF'
+    sudo apt update
+    sudo apt install rdap -y
+    ```
+  </Step>
+</Steps>
+
+### RHEL / CentOS / Rocky / Alma / Fedora
+
+For RPM-based distributions:
+
+```bash
+# Add xTom repository
+sudo curl -o /etc/yum.repos.d/xtom.repo https://repo.xtom.com/rpm/xtom.repo
+sudo dnf install rdap
+```
+
+<Note>
+Use `yum` instead of `dnf` on older systems like CentOS 7.
+</Note>
+
+### macOS
+
+Install using Homebrew:
+
+```bash
+# Install Homebrew if you haven't already: https://brew.sh/
+
+# Add the xTom tap
+brew tap xtomcom/brew
+
+# Install rdap
+brew install xtomcom/brew/rdap
+```
+
+<Tip>
+Homebrew will automatically handle all dependencies for you.
+</Tip>
+
+## Building from Source
+
+### Prerequisites
+
+Before building, ensure you have Rust installed:
+
+```bash
+# Install Rust using rustup (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Ensure cargo is in your PATH
+source $HOME/.cargo/env
+```
+
+### Build and Install
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone https://github.com/xtomcom/rdap.git
+    cd rdap
+    ```
+  </Step>
+  
+  <Step title="Build Release Version">
+    Build an optimized release binary:
+    
+    ```bash
+    cargo build --release
+    ```
+    
+    The binary will be created at `target/release/rdap`.
+  </Step>
+  
+  <Step title="Install to System">
+    Copy the binary to your system path:
+    
+    ```bash
+    # Linux/macOS
+    sudo cp target/release/rdap /usr/local/bin/
+    
+    # Make sure it's executable
+    sudo chmod +x /usr/local/bin/rdap
+    ```
+  </Step>
+</Steps>
+
+<Note>
+The release build uses aggressive optimizations (`opt-level = 3`, LTO, single codegen unit) and strips debug symbols, resulting in a binary of approximately 4MB.
+</Note>
+
+### Development Build
+
+For development or testing, you can build without optimizations:
+
+```bash
+# Build debug version (faster compile, slower runtime)
+cargo build
+
+# Run directly without installing
+cargo run -- example.com
+
+# Run tests
+cargo test
+```
+
+## Using as a Library
+
+To use RDAP as a library in your Rust project, add it to your `Cargo.toml`:
+
+```toml Cargo.toml
+[dependencies]
+rdap = { git = "https://github.com/xtomcom/rdap.git" }
+tokio = { version = "1.49", features = ["full"] }
+```
+
+<Tip>
+You can also specify a particular branch, tag, or commit:
+
+```toml
+# Use main branch
+rdap = { git = "https://github.com/xtomcom/rdap.git", branch = "main" }
+
+# Use a specific tag
+rdap = { git = "https://github.com/xtomcom/rdap.git", tag = "v1.0.0" }
+
+# Use a specific commit
+rdap = { git = "https://github.com/xtomcom/rdap.git", rev = "abc123" }
+```
+</Tip>
+
+## Verifying Installation
+
+After installation, verify that RDAP is working correctly:
+
+```bash
+# Check version
+rdap --version
+
+# Run a simple query
+rdap example.com
+```
+
+You should see colorized output with domain information for example.com.
+
+## Configuration
+
+After installation, you can optionally update the configuration files:
+
+```bash
+# Download latest configuration from GitHub
+rdap --update
+```
+
+This command downloads:
+- `config.json` - Bootstrap URLs for IANA RDAP
+- `tlds.json` - TLD overrides for ccTLDs
+- `tlds.txt` - IANA TLD list
+
+Files are stored in:
+- `~/.config/rdap/` (user configuration)
+- `/etc/rdap/` (system-wide configuration)
+
+<Warning>
+The `--update` command will overwrite `config.json` and `tlds.json` but will never touch your `*.local.json` override files.
+</Warning>
+
+## Troubleshooting
+
+### Command Not Found
+
+If you get "command not found" after installing:
+
+1. **Check if binary is in PATH:**
+   ```bash
+   which rdap
+   ```
+
+2. **For cargo install, ensure cargo bin is in PATH:**
+   ```bash
+   echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+3. **For manual builds, verify the binary location:**
+   ```bash
+   ls -la /usr/local/bin/rdap
+   ```
+
+### SSL Certificate Errors
+
+If you encounter SSL certificate errors:
+
+```bash
+# Temporarily disable SSL verification (not recommended for production)
+rdap -k example.com
+
+# Or update your system's CA certificates
+sudo apt update && sudo apt install ca-certificates  # Debian/Ubuntu
+```
+
+### Permission Denied
+
+If you get permission errors when installing:
+
+```bash
+# Ensure you're using sudo for system-wide installation
+sudo cp target/release/rdap /usr/local/bin/
+sudo chmod +x /usr/local/bin/rdap
+
+# Or install to user directory instead
+mkdir -p ~/.local/bin
+cp target/release/rdap ~/.local/bin/
+```
+
+## Next Steps
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Learn how to use the RDAP client with practical examples
+</Card>

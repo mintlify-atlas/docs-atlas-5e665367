@@ -1,0 +1,606 @@
+---
+title: Working with Results
+description: Extract and process data from RDAP responses
+---
+
+RDAP queries return an `RdapObject` enum that contains different response types. This guide shows you how to work with each variant.
+
+## RdapObject Enum
+
+All query results are wrapped in the `RdapObject` enum:
+
+```rust
+pub enum RdapObject {
+    Domain(Domain),
+    Entity(Entity),
+    Nameserver(Nameserver),
+    Autnum(Autnum),
+    IpNetwork(IpNetwork),
+    Error(ErrorResponse),
+    DomainSearch(DomainSearchResults),
+    EntitySearch(EntitySearchResults),
+    NameserverSearch(NameserverSearchResults),
+    Help(HelpResponse),
+}
+```
+
+**Source reference:** `src/models/mod.rs:28`
+
+## Pattern Matching
+
+Use pattern matching to handle different response types:
+
+```rust
+use rdap::{RdapClient, RdapRequest, RdapObject};
+
+let client = RdapClient::new()?;
+let query_type = RdapRequest::detect_type("example.com")?;
+let request = RdapRequest::new(query_type, "example.com");
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::Domain(domain) => {
+        println!("Domain: {:?}", domain.ldh_name);
+    }
+    RdapObject::IpNetwork(network) => {
+        println!("IP Network: {:?}", network.name);
+    }
+    RdapObject::Autnum(autnum) => {
+        println!("AS Number: {:?}", autnum.start_autnum);
+    }
+    RdapObject::Error(err) => {
+        eprintln!("Server error: {:?}", err.title);
+    }
+    _ => {
+        println!("Other response type");
+    }
+}
+```
+
+## Domain Results
+
+Extract domain information:
+
+```rust
+use rdap::{RdapObject, RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let result = client.query(&request).await?;
+
+if let RdapObject::Domain(domain) = result {
+    // Basic information
+    if let Some(name) = &domain.ldh_name {
+        println!("Domain Name: {}", name);
+    }
+    
+    if let Some(handle) = &domain.handle {
+        println!("Handle: {}", handle);
+    }
+    
+    // Status
+    for status in &domain.status {
+        println!("Status: {}", status);
+    }
+    
+    // Nameservers
+    for ns in &domain.nameservers {
+        if let Some(name) = &ns.ldh_name {
+            println!("Nameserver: {}", name);
+            
+            // Nameserver IP addresses
+            if let Some(ips) = &ns.ip_addresses {
+                for v4 in &ips.v4 {
+                    println!("  IPv4: {}", v4);
+                }
+                for v6 in &ips.v6 {
+                    println!("  IPv6: {}", v6);
+                }
+            }
+        }
+    }
+    
+    // DNSSEC
+    if let Some(dnssec) = &domain.secure_dns {
+        if let Some(signed) = dnssec.delegation_signed {
+            println!("DNSSEC Delegation Signed: {}", signed);
+        }
+        
+        if let Some(signed) = dnssec.zone_signed {
+            println!("DNSSEC Zone Signed: {}", signed);
+        }
+        
+        // DS records
+        for ds in &dnssec.ds_data {
+            if let Some(key_tag) = ds.key_tag {
+                println!("DS Key Tag: {}", key_tag);
+            }
+            if let Some(algorithm) = ds.algorithm {
+                println!("DS Algorithm: {}", algorithm);
+            }
+        }
+    }
+    
+    // Events (dates)
+    for event in &domain.events {
+        match event.action.as_str() {
+            "registration" => println!("Registered: {}", event.date),
+            "expiration" => println!("Expires: {}", event.date),
+            "last changed" => println!("Last Updated: {}", event.date),
+            "last update of RDAP database" => println!("RDAP DB Updated: {}", event.date),
+            _ => println!("Event {}: {}", event.action, event.date),
+        }
+    }
+    
+    // Entities (contacts)
+    for entity in &domain.entities {
+        println!("Entity Roles: {}", entity.roles.join(", "));
+        
+        if let Some(handle) = &entity.handle {
+            println!("Entity Handle: {}", handle);
+        }
+        
+        // Contact information (vCard)
+        if let Some(vcard) = &entity.vcard {
+            if let Some(name) = vcard.name() {
+                println!("Name: {}", name);
+            }
+            if let Some(email) = vcard.email() {
+                println!("Email: {}", email);
+            }
+            if let Some(tel) = vcard.tel() {
+                println!("Phone: {}", tel);
+            }
+            if let Some(org) = vcard.org() {
+                println!("Organization: {}", org);
+            }
+        }
+    }
+}
+```
+
+**Source reference:** `src/models/domain.rs:8`, `examples/domain_info.rs`
+
+### Domain Type Signature
+
+```rust
+pub struct Domain {
+    pub object_class_name: String,
+    pub conformance: Vec<String>,
+    pub notices: Vec<Notice>,
+    pub handle: Option<String>,
+    pub ldh_name: Option<String>,
+    pub unicode_name: Option<String>,
+    pub variants: Vec<Variant>,
+    pub nameservers: Vec<Nameserver>,
+    pub secure_dns: Option<SecureDNS>,
+    pub entities: Vec<Entity>,
+    pub status: Status,  // Vec<String>
+    pub public_ids: Vec<PublicId>,
+    pub remarks: Vec<Remark>,
+    pub links: Vec<Link>,
+    pub port43: Option<String>,
+    pub events: Vec<Event>,
+    pub network: Option<Box<IpNetwork>>,
+    pub lang: Option<String>,
+}
+```
+
+**Source reference:** `src/models/domain.rs:8`
+
+## IP Network Results
+
+Extract IP network information:
+
+```rust
+use rdap::{RdapObject, RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Ip, "8.8.8.8");
+let result = client.query(&request).await?;
+
+if let RdapObject::IpNetwork(network) = result {
+    // Network information
+    if let Some(name) = &network.name {
+        println!("Network Name: {}", name);
+    }
+    
+    if let Some(handle) = &network.handle {
+        println!("Handle: {}", handle);
+    }
+    
+    // Address range
+    if let (Some(start), Some(end)) = (&network.start_address, &network.end_address) {
+        println!("Range: {} - {}", start, end);
+    }
+    
+    // IP version
+    if let Some(version) = &network.ip_version {
+        println!("IP Version: IPv{}", version);
+    }
+    
+    // Network type
+    if let Some(net_type) = &network.network_type {
+        println!("Type: {}", net_type);
+    }
+    
+    // Country
+    if let Some(country) = &network.country {
+        println!("Country: {}", country);
+    }
+    
+    // Parent network
+    if let Some(parent) = &network.parent_handle {
+        println!("Parent Handle: {}", parent);
+    }
+    
+    // Status
+    for status in &network.status {
+        println!("Status: {}", status);
+    }
+    
+    // Contacts
+    for entity in &network.entities {
+        if entity.roles.contains(&"registrant".to_string()) {
+            if let Some(vcard) = &entity.vcard {
+                if let Some(org) = vcard.org() {
+                    println!("Registrant: {}", org);
+                }
+            }
+        }
+    }
+}
+```
+
+**Source reference:** `src/models/ip_network.rs:8`, `examples/ip_lookup.rs`
+
+### IpNetwork Type Signature
+
+```rust
+pub struct IpNetwork {
+    pub object_class_name: Option<String>,
+    pub conformance: Vec<String>,
+    pub notices: Vec<Notice>,
+    pub handle: Option<String>,
+    pub start_address: Option<String>,
+    pub end_address: Option<String>,
+    pub ip_version: Option<String>,
+    pub name: Option<String>,
+    pub network_type: Option<String>,
+    pub country: Option<String>,
+    pub parent_handle: Option<String>,
+    pub status: Status,  // Vec<String>
+    pub entities: Vec<Entity>,
+    pub remarks: Vec<Remark>,
+    pub links: Vec<Link>,
+    pub port43: Option<String>,
+    pub events: Vec<Event>,
+    pub lang: Option<String>,
+}
+```
+
+**Source reference:** `src/models/ip_network.rs:8`
+
+## AS Number Results
+
+Extract autonomous system information:
+
+```rust
+use rdap::{RdapObject, RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+let result = client.query(&request).await?;
+
+if let RdapObject::Autnum(autnum) = result {
+    // AS number range
+    if let Some(start) = autnum.start_autnum {
+        if let Some(end) = autnum.end_autnum {
+            if start == end {
+                println!("AS Number: AS{}", start);
+            } else {
+                println!("AS Range: AS{} - AS{}", start, end);
+            }
+        }
+    }
+    
+    // Name and type
+    if let Some(name) = &autnum.name {
+        println!("Name: {}", name);
+    }
+    
+    if let Some(as_type) = &autnum.as_type {
+        println!("Type: {}", as_type);
+    }
+    
+    // Country
+    if let Some(country) = &autnum.country {
+        println!("Country: {}", country);
+    }
+    
+    // Events
+    for event in &autnum.events {
+        println!("{}: {}", event.action, event.date);
+    }
+    
+    // Contacts grouped by role
+    let mut role_counts = std::collections::HashMap::new();
+    for entity in &autnum.entities {
+        for role in &entity.roles {
+            *role_counts.entry(role.clone()).or_insert(0) += 1;
+        }
+    }
+    
+    for (role, count) in role_counts {
+        println!("{}: {} contact(s)", role, count);
+    }
+}
+```
+
+**Source reference:** `src/models/autnum.rs:8`, `examples/asn_lookup.rs`
+
+### Autnum Type Signature
+
+```rust
+pub struct Autnum {
+    pub object_class_name: Option<String>,
+    pub conformance: Vec<String>,
+    pub notices: Vec<Notice>,
+    pub handle: Option<String>,
+    pub start_autnum: Option<u32>,
+    pub end_autnum: Option<u32>,
+    pub ip_version: Option<String>,
+    pub name: Option<String>,
+    pub as_type: Option<String>,
+    pub status: Status,  // Vec<String>
+    pub country: Option<String>,
+    pub entities: Vec<Entity>,
+    pub remarks: Vec<Remark>,
+    pub links: Vec<Link>,
+    pub port43: Option<String>,
+    pub events: Vec<Event>,
+    pub lang: Option<String>,
+}
+```
+
+**Source reference:** `src/models/autnum.rs:8`
+
+## Entity Results
+
+Extract entity (contact) information:
+
+```rust
+use rdap::{RdapObject};
+
+if let RdapObject::Entity(entity) = result {
+    // Handle and roles
+    if let Some(handle) = &entity.handle {
+        println!("Handle: {}", handle);
+    }
+    
+    println!("Roles: {}", entity.roles.join(", "));
+    
+    // vCard contact info
+    if let Some(vcard) = &entity.vcard {
+        if let Some(name) = vcard.name() {
+            println!("Name: {}", name);
+        }
+        
+        if let Some(org) = vcard.org() {
+            println!("Organization: {}", org);
+        }
+        
+        if let Some(email) = vcard.email() {
+            println!("Email: {}", email);
+        }
+        
+        if let Some(tel) = vcard.tel() {
+            println!("Phone: {}", tel);
+        }
+        
+        // Address
+        if let Some(addr) = vcard.address() {
+            if let Some(label) = &addr.label {
+                println!("Address: {}", label);
+            } else {
+                println!("Street: {}", addr.street);
+                println!("City: {}", addr.locality);
+                println!("Region: {}", addr.region);
+                println!("Postal Code: {}", addr.postal_code);
+                println!("Country: {}", addr.country);
+            }
+        }
+    }
+    
+    // Nested entities
+    for nested_entity in &entity.entities {
+        println!("Nested entity: {} ({})", 
+            nested_entity.handle.as_deref().unwrap_or("Unknown"),
+            nested_entity.roles.join(", ")
+        );
+    }
+}
+```
+
+**Source reference:** `src/models/entity.rs:8`, `src/models/vcard.rs:8`
+
+### Entity Type Signature
+
+```rust
+pub struct Entity {
+    pub object_class_name: Option<String>,
+    pub conformance: Vec<String>,
+    pub notices: Vec<Notice>,
+    pub handle: Option<String>,
+    pub vcard: Option<VCard>,
+    pub roles: Vec<String>,
+    pub public_ids: Vec<PublicId>,
+    pub entities: Vec<Self>,  // Nested entities
+    pub remarks: Vec<Remark>,
+    pub links: Vec<Link>,
+    pub events: Vec<Event>,
+    pub as_event_actor: Vec<Event>,
+    pub status: Status,  // Vec<String>
+    pub port43: Option<String>,
+    pub networks: Vec<IpNetwork>,
+    pub autnums: Vec<Autnum>,
+    pub lang: Option<String>,
+}
+```
+
+**Source reference:** `src/models/entity.rs:8`
+
+## Search Results
+
+Handle search results that contain multiple objects:
+
+```rust
+use rdap::{RdapObject};
+
+if let RdapObject::DomainSearch(search) = result {
+    println!("Found {} domains", search.domains.len());
+    
+    for domain in &search.domains {
+        if let Some(name) = &domain.ldh_name {
+            println!("  - {}", name);
+        }
+    }
+}
+
+if let RdapObject::EntitySearch(search) = result {
+    println!("Found {} entities", search.entities.len());
+    
+    for entity in &search.entities {
+        if let Some(handle) = &entity.handle {
+            println!("  - {} ({})", handle, entity.roles.join(", "));
+        }
+    }
+}
+
+if let RdapObject::NameserverSearch(search) = result {
+    println!("Found {} nameservers", search.nameservers.len());
+    
+    for ns in &search.nameservers {
+        if let Some(name) = &ns.ldh_name {
+            println!("  - {}", name);
+        }
+    }
+}
+```
+
+**Source reference:** `src/models/search.rs`
+
+## Common Fields
+
+Many RDAP objects share common fields:
+
+### Events
+
+```rust
+pub struct Event {
+    pub action: String,        // e.g., "registration", "expiration"
+    pub actor: Option<String>,
+    pub date: String,          // ISO 8601 format
+    pub links: Vec<Link>,
+}
+```
+
+**Source reference:** `src/models/common.rs:46`
+
+### Links
+
+```rust
+pub struct Link {
+    pub value: Option<String>,
+    pub rel: Option<String>,   // e.g., "self", "related"
+    pub href: String,
+    pub hreflang: Vec<String>,
+    pub title: Option<String>,
+    pub media: Option<String>,
+    pub link_type: Option<String>,
+}
+```
+
+**Source reference:** `src/models/common.rs:6`
+
+### Notices and Remarks
+
+```rust
+pub struct Notice {
+    pub title: Option<String>,
+    pub notice_type: Option<String>,
+    pub description: Vec<String>,
+    pub links: Vec<Link>,
+}
+
+pub type Remark = Notice;  // Same structure
+```
+
+**Source reference:** `src/models/common.rs:30`
+
+## JSON Serialization
+
+All RDAP objects can be serialized to JSON:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let result = client.query(&request).await?;
+
+// Serialize to pretty JSON
+let json = serde_json::to_string_pretty(&result)?;
+println!("{}", json);
+
+// Serialize to compact JSON
+let json = serde_json::to_string(&result)?;
+println!("{}", json);
+```
+
+**Source reference:** `examples/json_output.rs`
+
+## Query Result with Referral
+
+When using `query_with_referral()`, you get both registry and registrar data:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let query_result = client.query_with_referral(&request).await?;
+
+println!("Registry URL: {}", query_result.registry_url);
+println!("Registry data: {:?}", query_result.registry);
+
+if let Some(registrar_data) = query_result.registrar {
+    println!("Registrar URL: {:?}", query_result.registrar_url);
+    println!("Registrar data: {:?}", registrar_data);
+}
+```
+
+**Type signature:**
+
+```rust
+pub struct RdapQueryResult {
+    pub registry: RdapObject,
+    pub registry_url: Url,
+    pub registrar: Option<RdapObject>,
+    pub registrar_url: Option<Url>,
+}
+```
+
+**Source reference:** `src/client.rs:15`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/library/error-handling">
+    Learn how to handle errors and edge cases
+  </Card>
+  
+  <Card title="Examples" icon="book" href="/library/examples">
+    See complete working examples
+  </Card>
+</CardGroup>

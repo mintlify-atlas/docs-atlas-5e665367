@@ -1,0 +1,318 @@
+---
+title: Domain
+description: Domain name registration information from RDAP queries
+---
+
+## Domain
+
+Represents domain name registration information returned from RDAP queries.
+
+<ResponseField name="object_class_name" type="string" required>
+  Always "domain" for domain objects
+</ResponseField>
+
+<ResponseField name="conformance" type="array<string>">
+  RDAP conformance levels (e.g., `["rdap_level_0"]`)
+</ResponseField>
+
+<ResponseField name="notices" type="array<Notice>">
+  Server notices and terms of service. See [common fields](#notice)
+</ResponseField>
+
+<ResponseField name="handle" type="string">
+  Registry-unique identifier for the domain
+</ResponseField>
+
+<ResponseField name="ldh_name" type="string">
+  LDH (Letters, Digits, Hyphen) representation of the domain name
+  
+  ```rust
+  let domain_name = domain.ldh_name.unwrap_or_default();
+  ```
+</ResponseField>
+
+<ResponseField name="unicode_name" type="string">
+  Unicode representation of the domain name (for IDNs)
+</ResponseField>
+
+<ResponseField name="variants" type="array<Variant>">
+  Domain name variants (IDN variations)
+  
+  <Expandable title="Variant">
+    <ResponseField name="relation" type="array<string>">
+      Relationship types (e.g., "registered", "unregistered")
+    </ResponseField>
+    
+    <ResponseField name="idn_table" type="string">
+      IDN table identifier
+    </ResponseField>
+    
+    <ResponseField name="variant_names" type="array<VariantName>">
+      <Expandable title="VariantName">
+        <ResponseField name="ldh_name" type="string">
+          LDH representation of variant
+        </ResponseField>
+        
+        <ResponseField name="unicode_name" type="string">
+          Unicode representation of variant
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="nameservers" type="array<Nameserver>">
+  Authoritative nameservers for the domain. See [Nameserver](/api/models/nameserver)
+</ResponseField>
+
+<ResponseField name="secure_dns" type="SecureDNS">
+  DNSSEC information for the domain
+  
+  <Expandable title="SecureDNS">
+    <ResponseField name="zone_signed" type="boolean">
+      Whether the zone is signed with DNSSEC
+    </ResponseField>
+    
+    <ResponseField name="delegation_signed" type="boolean">
+      Whether the delegation is signed
+    </ResponseField>
+    
+    <ResponseField name="max_sig_life" type="number">
+      Maximum signature lifetime in seconds
+    </ResponseField>
+    
+    <ResponseField name="ds_data" type="array<DSData>">
+      DS (Delegation Signer) records
+      
+      <Expandable title="DSData">
+        <ResponseField name="key_tag" type="number">
+          Key tag value
+        </ResponseField>
+        
+        <ResponseField name="algorithm" type="number">
+          DNSSEC algorithm number
+        </ResponseField>
+        
+        <ResponseField name="digest" type="string">
+          Digest value (hex string)
+        </ResponseField>
+        
+        <ResponseField name="digest_type" type="number">
+          Digest algorithm type
+        </ResponseField>
+        
+        <ResponseField name="events" type="array<Event>">
+          Events for this DS record. See [common fields](#event)
+        </ResponseField>
+        
+        <ResponseField name="links" type="array<Link>">
+          Related links. See [common fields](#link)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="key_data" type="array<KeyData>">
+      DNSKEY records
+      
+      <Expandable title="KeyData">
+        <ResponseField name="flags" type="number">
+          DNSKEY flags (e.g., 256 for ZSK, 257 for KSK)
+        </ResponseField>
+        
+        <ResponseField name="protocol" type="number">
+          Protocol number (always 3 for DNSSEC)
+        </ResponseField>
+        
+        <ResponseField name="algorithm" type="number">
+          DNSSEC algorithm number
+        </ResponseField>
+        
+        <ResponseField name="public_key" type="string">
+          Base64-encoded public key
+        </ResponseField>
+        
+        <ResponseField name="events" type="array<Event>">
+          Events for this key. See [common fields](#event)
+        </ResponseField>
+        
+        <ResponseField name="links" type="array<Link>">
+          Related links. See [common fields](#link)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="entities" type="array<Entity>">
+  Related entities (registrant, contacts, registrar). See [Entity](/api/models/entity)
+  
+  ```rust
+  // Find the registrar
+  let registrar = domain.entities.iter()
+      .find(|e| e.roles.contains(&"registrar".to_string()));
+  ```
+</ResponseField>
+
+<ResponseField name="status" type="array<string>">
+  Domain status values (e.g., "active", "locked", "client transfer prohibited")
+  
+  ```rust
+  if domain.status.contains(&"client transfer prohibited".to_string()) {
+      println!("Domain is transfer locked");
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="public_ids" type="array<PublicId>">
+  Public identifiers. See [common fields](#publicid)
+</ResponseField>
+
+<ResponseField name="remarks" type="array<Remark>">
+  Informational remarks. See [common fields](#remark)
+</ResponseField>
+
+<ResponseField name="links" type="array<Link>">
+  Related links (self, registrar RDAP, etc.). See [common fields](#link)
+</ResponseField>
+
+<ResponseField name="port43" type="string">
+  WHOIS server hostname for port 43 queries
+</ResponseField>
+
+<ResponseField name="events" type="array<Event>">
+  Domain lifecycle events. See [common fields](#event)
+  
+  ```rust
+  // Find registration date
+  let reg_date = domain.events.iter()
+      .find(|e| e.action == "registration")
+      .map(|e| &e.date);
+  ```
+</ResponseField>
+
+<ResponseField name="network" type="IpNetwork">
+  Associated IP network (rarely used). See [IpNetwork](/api/models/ip-network)
+</ResponseField>
+
+<ResponseField name="lang" type="string">
+  Language tag (e.g., "en", "fr")
+</ResponseField>
+
+## Common Fields
+
+### Link
+
+<ResponseField name="href" type="string" required>
+  URL of the link
+</ResponseField>
+
+<ResponseField name="rel" type="string">
+  Link relationship type (e.g., "self", "related")
+</ResponseField>
+
+<ResponseField name="value" type="string">
+  Context-specific value
+</ResponseField>
+
+<ResponseField name="hreflang" type="array<string>">
+  Language tags for the target resource
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Human-readable title
+</ResponseField>
+
+<ResponseField name="media" type="string">
+  Media type hint
+</ResponseField>
+
+<ResponseField name="link_type" type="string">
+  MIME type of the linked resource
+</ResponseField>
+
+### Event
+
+<ResponseField name="action" type="string" required>
+  Event type (e.g., "registration", "expiration", "last changed")
+</ResponseField>
+
+<ResponseField name="date" type="string" required>
+  ISO 8601 timestamp
+</ResponseField>
+
+<ResponseField name="actor" type="string">
+  Entity that triggered the event
+</ResponseField>
+
+<ResponseField name="links" type="array<Link>">
+  Related links
+</ResponseField>
+
+### Notice
+
+<ResponseField name="title" type="string">
+  Notice title
+</ResponseField>
+
+<ResponseField name="notice_type" type="string">
+  Type of notice
+</ResponseField>
+
+<ResponseField name="description" type="array<string>">
+  Lines of descriptive text
+</ResponseField>
+
+<ResponseField name="links" type="array<Link>">
+  Related links
+</ResponseField>
+
+### Remark
+
+Identical structure to [Notice](#notice).
+
+### PublicId
+
+<ResponseField name="id_type" type="string" required>
+  Identifier type (e.g., "IANA Registrar ID")
+</ResponseField>
+
+<ResponseField name="identifier" type="string" required>
+  The actual identifier value
+</ResponseField>
+
+## Example Usage
+
+```rust
+use rdap_client::RdapClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new();
+    let result = client.query("example.com").await?;
+    
+    if let Some(domain) = result.domain() {
+        println!("Domain: {}", domain.ldh_name.as_deref().unwrap_or("N/A"));
+        
+        // Get nameservers
+        for ns in &domain.nameservers {
+            println!("NS: {}", ns.ldh_name.as_deref().unwrap_or("N/A"));
+        }
+        
+        // Check DNSSEC
+        if let Some(dns) = &domain.secure_dns {
+            println!("DNSSEC signed: {}", dns.zone_signed.unwrap_or(false));
+        }
+        
+        // Get registrar
+        for entity in &domain.entities {
+            if entity.roles.contains(&"registrar".to_string()) {
+                if let Some(vcard) = &entity.vcard {
+                    println!("Registrar: {}", vcard.name().unwrap_or("Unknown"));
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+```

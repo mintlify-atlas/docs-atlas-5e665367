@@ -1,0 +1,382 @@
+---
+title: Query Types
+description: Complete reference of all RDAP query types and their usage
+---
+
+The RDAP library supports all standard RDAP query types defined in RFC 7482.
+
+## QueryType Enum
+
+The `QueryType` enum defines all available query operations:
+
+```rust
+pub enum QueryType {
+    Domain,
+    Tld,
+    Ip,
+    Autnum,
+    Entity,
+    Nameserver,
+    Help,
+    DomainSearch,
+    DomainSearchByNameserver,
+    DomainSearchByNameserverIp,
+    NameserverSearch,
+    NameserverSearchByIp,
+    EntitySearch,
+    EntitySearchByHandle,
+}
+```
+
+**Source reference:** `src/request.rs:8`
+
+## Lookup Queries
+
+Lookup queries retrieve a single object by its identifier.
+
+### Domain
+
+Query a domain name:
+
+```rust
+use rdap::{RdapRequest, QueryType};
+
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+```
+
+**URL format:** `{base}/domain/example.com`
+
+**Returns:** `RdapObject::Domain`
+
+### Tld
+
+Query a top-level domain:
+
+```rust
+let request = RdapRequest::new(QueryType::Tld, "com");
+```
+
+**URL format:** `{base}/domain/com`
+
+**Returns:** `RdapObject::Domain`
+
+<Note>
+TLD queries are automatically routed to IANA's RDAP service.
+</Note>
+
+### Ip
+
+Query an IP address or network:
+
+<Tabs>
+  <Tab title="IPv4 Address">
+    ```rust
+    let request = RdapRequest::new(QueryType::Ip, "192.0.2.1");
+    ```
+    
+    **URL format:** `{base}/ip/192.0.2.1`
+  </Tab>
+  
+  <Tab title="IPv6 Address">
+    ```rust
+    let request = RdapRequest::new(QueryType::Ip, "2001:db8::1");
+    ```
+    
+    **URL format:** `{base}/ip/2001:db8::1`
+  </Tab>
+  
+  <Tab title="CIDR Notation">
+    ```rust
+    let request = RdapRequest::new(QueryType::Ip, "192.0.2.0/24");
+    ```
+    
+    **URL format:** `{base}/ip/192.0.2.0/24`
+  </Tab>
+</Tabs>
+
+**Returns:** `RdapObject::IpNetwork`
+
+### Autnum
+
+Query an Autonomous System Number:
+
+```rust
+// With AS prefix
+let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+
+// Without AS prefix
+let request = RdapRequest::new(QueryType::Autnum, "15169");
+```
+
+**URL format:** `{base}/autnum/15169`
+
+**Returns:** `RdapObject::Autnum`
+
+<Note>
+The library automatically strips the "AS" prefix if present.
+</Note>
+
+**Source reference:** `src/request.rs:96`
+
+### Entity
+
+Query an entity (registrant, contact):
+
+```rust
+let request = RdapRequest::new(QueryType::Entity, "ENTITY-HANDLE");
+```
+
+**URL format:** `{base}/entity/ENTITY-HANDLE`
+
+**Returns:** `RdapObject::Entity`
+
+### Nameserver
+
+Query a nameserver:
+
+```rust
+let request = RdapRequest::new(QueryType::Nameserver, "ns1.example.com");
+```
+
+**URL format:** `{base}/nameserver/ns1.example.com`
+
+**Returns:** `RdapObject::Nameserver`
+
+### Help
+
+Query server help information:
+
+```rust
+let request = RdapRequest::new(QueryType::Help, "");
+```
+
+**URL format:** `{base}/help`
+
+**Returns:** `RdapObject::Help`
+
+## Search Queries
+
+Search queries return multiple matching objects.
+
+### DomainSearch
+
+Search for domains by name:
+
+```rust
+let request = RdapRequest::new(QueryType::DomainSearch, "example*.com");
+```
+
+**URL format:** `{base}/domains?name=example*.com`
+
+**Returns:** `RdapObject::DomainSearch`
+
+**Source reference:** `src/request.rs:107`
+
+### DomainSearchByNameserver
+
+Search for domains by nameserver name:
+
+```rust
+let request = RdapRequest::new(
+    QueryType::DomainSearchByNameserver,
+    "ns1.example.com"
+);
+```
+
+**URL format:** `{base}/domains?nsLdhName=ns1.example.com`
+
+**Returns:** `RdapObject::DomainSearch`
+
+**Source reference:** `src/request.rs:110`
+
+### DomainSearchByNameserverIp
+
+Search for domains by nameserver IP:
+
+```rust
+let request = RdapRequest::new(
+    QueryType::DomainSearchByNameserverIp,
+    "192.0.2.1"
+);
+```
+
+**URL format:** `{base}/domains?nsIp=192.0.2.1`
+
+**Returns:** `RdapObject::DomainSearch`
+
+**Source reference:** `src/request.rs:113`
+
+### NameserverSearch
+
+Search for nameservers by name:
+
+```rust
+let request = RdapRequest::new(QueryType::NameserverSearch, "ns*.example.com");
+```
+
+**URL format:** `{base}/nameservers?name=ns*.example.com`
+
+**Returns:** `RdapObject::NameserverSearch`
+
+**Source reference:** `src/request.rs:116`
+
+### NameserverSearchByIp
+
+Search for nameservers by IP address:
+
+```rust
+let request = RdapRequest::new(QueryType::NameserverSearchByIp, "192.0.2.1");
+```
+
+**URL format:** `{base}/nameservers?ip=192.0.2.1`
+
+**Returns:** `RdapObject::NameserverSearch`
+
+**Source reference:** `src/request.rs:119`
+
+### EntitySearch
+
+Search for entities by full name:
+
+```rust
+let request = RdapRequest::new(QueryType::EntitySearch, "Example Corp");
+```
+
+**URL format:** `{base}/entities?fn=Example%20Corp`
+
+**Returns:** `RdapObject::EntitySearch`
+
+**Source reference:** `src/request.rs:122`
+
+### EntitySearchByHandle
+
+Search for entities by handle:
+
+```rust
+let request = RdapRequest::new(QueryType::EntitySearchByHandle, "EXAMPLE-*");
+```
+
+**URL format:** `{base}/entities?handle=EXAMPLE-*`
+
+**Returns:** `RdapObject::EntitySearch`
+
+**Source reference:** `src/request.rs:125`
+
+## Auto-Detection
+
+The library can automatically detect the query type:
+
+```rust
+use rdap::RdapRequest;
+
+// Domain
+let qt = RdapRequest::detect_type("example.com")?;
+// QueryType::Domain
+
+// IPv4
+let qt = RdapRequest::detect_type("8.8.8.8")?;
+// QueryType::Ip
+
+// IPv6
+let qt = RdapRequest::detect_type("2001:db8::1")?;
+// QueryType::Ip
+
+// AS Number (with prefix)
+let qt = RdapRequest::detect_type("AS15169")?;
+// QueryType::Autnum
+
+// AS Number (without prefix)
+let qt = RdapRequest::detect_type("15169")?;
+// QueryType::Autnum
+```
+
+**Source reference:** `src/request.rs:134`
+
+### Detection Logic
+
+The auto-detection follows this priority:
+
+<Steps>
+  <Step title="AS Number">
+    Strings starting with "AS" followed by digits, or pure numeric strings.
+  </Step>
+  
+  <Step title="IP Address">
+    IPv4 or IPv6 patterns, including CIDR notation.
+  </Step>
+  
+  <Step title="TLD">
+    Single word (no dots) matching a known TLD.
+  </Step>
+  
+  <Step title="Domain">
+    Default fallback for all other strings.
+  </Step>
+</Steps>
+
+**Source reference:** `src/request.rs:139`
+
+## URL Building
+
+The library automatically constructs the correct RDAP URL:
+
+```rust
+use rdap::RdapRequest;
+use url::Url;
+
+let base_url = Url::parse("https://rdap.example.com/")?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let url = request.build_url(&base_url)?;
+// https://rdap.example.com/domain/example.com
+```
+
+**Source reference:** `src/request.rs:88`
+
+<Note>
+Query strings are automatically URL-encoded for safe transmission.
+</Note>
+
+## Complete Example
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    
+    // Try different query types
+    let queries = vec![
+        (QueryType::Domain, "example.com"),
+        (QueryType::Ip, "8.8.8.8"),
+        (QueryType::Autnum, "AS15169"),
+        (QueryType::Entity, "IANA"),
+        (QueryType::DomainSearch, "example*.com"),
+    ];
+    
+    for (query_type, query) in queries {
+        println!("\n=== {:?}: {} ===", query_type, query);
+        
+        let request = RdapRequest::new(query_type, query);
+        
+        match client.query(&request).await {
+            Ok(result) => println!("✓ Success: {:?}", result),
+            Err(e) => eprintln!("✗ Error: {}", e),
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Working with Results" icon="code" href="/library/working-with-results">
+    Learn how to extract data from query results
+  </Card>
+  
+  <Card title="Error Handling" icon="triangle-exclamation" href="/library/error-handling">
+    Handle errors and edge cases
+  </Card>
+</CardGroup>

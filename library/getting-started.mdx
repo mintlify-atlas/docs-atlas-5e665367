@@ -1,0 +1,175 @@
+---
+title: Getting Started
+description: Quick start guide for the RDAP Rust library
+---
+
+The RDAP library provides a modern, ergonomic interface for querying Registration Data Access Protocol (RDAP) servers.
+
+## Installation
+
+Add the RDAP library to your `Cargo.toml`:
+
+```toml Cargo.toml
+[dependencies]
+rdap = "0.1.0"
+tokio = { version = "1.0", features = ["full"] }
+```
+
+## Your First Query
+
+Here's a complete example to get you started:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a client
+    let client = RdapClient::new()?;
+
+    // Create a domain query
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+
+    // Execute the query
+    let result = client.query(&request).await?;
+
+    // Display the result
+    println!("Query result: {:?}", result);
+
+    Ok(())
+}
+```
+
+<Note>
+The library requires async/await support. Make sure to use an async runtime like Tokio.
+</Note>
+
+## Key Concepts
+
+<Steps>
+  <Step title="Create an RdapClient">
+    The `RdapClient` handles HTTP requests and bootstrap service discovery:
+
+    ```rust
+    let client = RdapClient::new()?;
+    ```
+
+    **Source reference:** `src/client.rs:36`
+  </Step>
+
+  <Step title="Build a Request">
+    Use `RdapRequest` to specify what you want to query:
+
+    ```rust
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    ```
+
+    **Source reference:** `src/request.rs:73`
+  </Step>
+
+  <Step title="Execute the Query">
+    Call `query()` or `query_with_referral()` to fetch RDAP data:
+
+    ```rust
+    let result = client.query(&request).await?;
+    ```
+
+    **Source reference:** `src/client.rs:65`
+  </Step>
+
+  <Step title="Process the Result">
+    The result is an `RdapObject` enum with variants for different response types:
+
+    ```rust
+    match result {
+        RdapObject::Domain(domain) => { /* ... */ },
+        RdapObject::IpNetwork(network) => { /* ... */ },
+        // ... other variants
+        _ => {}
+    }
+    ```
+
+    **Source reference:** `src/models/mod.rs:28`
+  </Step>
+</Steps>
+
+## Client Configuration
+
+### Custom Timeout
+
+Set a custom timeout for HTTP requests:
+
+```rust
+use std::time::Duration;
+
+let client = RdapClient::new()?
+    .with_timeout(Duration::from_secs(30));
+```
+
+**Source reference:** `src/client.rs:53`
+
+### Disable Registrar Referrals
+
+For domain queries, the client follows registrar referral links by default. Disable this behavior:
+
+```rust
+let client = RdapClient::new()?
+    .with_follow_referral(false);
+```
+
+**Source reference:** `src/client.rs:59`
+
+<Note>
+Registrar referrals allow you to get more detailed domain information from the registrar's RDAP server after querying the registry.
+</Note>
+
+## Auto-Detection
+
+The library can automatically detect query types:
+
+```rust
+use rdap::{RdapClient, RdapRequest};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+
+    let queries = vec![
+        "example.com",          // Detected as Domain
+        "8.8.8.8",              // Detected as IP
+        "2001:4860:4860::8888", // Detected as IPv6
+        "AS15169",              // Detected as Autnum
+    ];
+
+    for query in queries {
+        let query_type = RdapRequest::detect_type(query)?;
+        let request = RdapRequest::new(query_type, query);
+        let result = client.query(&request).await?;
+        println!("Result for {}: {:?}", query, result);
+    }
+
+    Ok(())
+}
+```
+
+**Source reference:** `src/request.rs:134`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Queries" icon="magnifying-glass" href="/library/basic-queries">
+    Learn how to query domains, IPs, and AS numbers
+  </Card>
+  
+  <Card title="Query Types" icon="list" href="/library/query-types">
+    Explore all available query types
+  </Card>
+  
+  <Card title="Working with Results" icon="code" href="/library/working-with-results">
+    Extract and process RDAP response data
+  </Card>
+  
+  <Card title="Error Handling" icon="triangle-exclamation" href="/library/error-handling">
+    Handle errors gracefully in your application
+  </Card>
+</CardGroup>

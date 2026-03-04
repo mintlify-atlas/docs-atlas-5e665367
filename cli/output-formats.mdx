@@ -1,0 +1,358 @@
+---
+title: Output Formats
+description: Formatting RDAP query results as text or JSON
+---
+
+The RDAP CLI supports three output formats: colorized text (default), compact JSON, and pretty-printed JSON.
+
+## Text Output (Default)
+
+The default format displays human-readable, colorized output with intelligent formatting.
+
+```bash
+rdap example.com
+```
+
+### Features
+
+<CardGroup cols={2}>
+  <Card title="Color Coding" icon="palette">
+    - Server URLs in cyan/green
+    - Headers in bold
+    - Values formatted for readability
+    - Status indicators highlighted
+  </Card>
+  
+  <Card title="Abuse Contacts" icon="shield">
+    Automatically extracts and displays abuse contact information at the top for:
+    - Domain queries
+    - IP address queries  
+    - AS number queries
+  </Card>
+  
+  <Card title="Smart Tables" icon="table">
+    Contact information and structured data displayed in formatted tables
+  </Card>
+  
+  <Card title="Multi-Layer" icon="layer-group">
+    For domain queries, shows both registry and registrar data when available
+  </Card>
+</CardGroup>
+
+### Domain Output Example
+
+```bash
+$ rdap google.com
+```
+
+```
+Abuse contact for `google.com` is `abusecomplaints@markmonitor.com`
+
+Query from https://rdap.verisign.com/com/v1/domain/google.com
+
+Domain Name: GOOGLE.COM
+Handle: 2138514_DOMAIN_COM-VRSN
+Object Class: domain
+Status: client delete prohibited
+Status: client transfer prohibited
+Status: client update prohibited
+Nameserver: NS1.GOOGLE.COM
+Nameserver: NS2.GOOGLE.COM
+Nameserver: NS3.GOOGLE.COM
+Nameserver: NS4.GOOGLE.COM
+Delegation Signed: no
+Registration: 1997-09-15T04:00:00Z
+Expiration: 2028-09-14T04:00:00Z
+Last Changed: 2019-09-09T15:39:04Z
+
+Entity Handle: 292
+Role: registrar
+Name: MarkMonitor Inc.
+IANA Registrar ID: 292
+
+Query from https://rdap.markmonitor.com/rdap/domain/GOOGLE.COM
+
+[Registrar data follows...]
+```
+
+### IP Output Example
+
+```bash
+$ rdap 8.8.8.8
+```
+
+```
+Abuse contact for `8.8.8.8` is `network-abuse@google.com`
+
+Query from https://rdap.arin.net/registry/ip/8.8.8.8
+
+Handle: NET-8-8-8-0-2
+Start Address: 8.8.8.0
+End Address: 8.8.8.255
+IP Version: v4
+Name: GOGL
+Type: DIRECT ALLOCATION
+Parent Handle: NET-8-0-0-0-0
+Status: active
+Port43: whois.arin.net
+last changed: 2023-12-28T17:24:56-05:00
+registration: 2023-12-28T17:24:33-05:00
+```
+
+### AS Number Output Example
+
+```bash
+$ rdap AS8888
+```
+
+```
+Abuse contact for `AS8888` is `abuse@xtom.com`
+
+Query from https://rdap.db.ripe.net/autnum/8888
+
+AS Number: AS8888
+Name: XTOM
+Handle: AS8888
+Object Class: autnum
+Status: active
+Port43: whois.ripe.net
+Registration: 1970-01-01T00:00:00Z
+Last Changed: 2024-08-17T11:00:40Z
+
+Entity Handle: ORG-XPL3-RIPE
+Role: registrant
+Name: xTom Pty Ltd
+Phone: +61280066886
+Address: 81 Campbell St
+         2010
+         Surry Hills
+         AUSTRALIA
+```
+
+## JSON Output
+
+Output the raw RDAP response as JSON for programmatic processing.
+
+### Compact JSON
+
+Minified JSON on a single line:
+
+```bash
+rdap -f json example.com
+```
+
+```json
+{"objectClassName":"domain","handle":"2138514_DOMAIN_COM-VRSN","ldhName":"EXAMPLE.COM","status":["client delete prohibited","client transfer prohibited"],...}
+```
+
+<Note>
+Compact JSON is ideal for piping to other tools like `jq` or storing in logs.
+</Note>
+
+### Pretty-Printed JSON
+
+Formatted JSON with indentation:
+
+```bash
+rdap -f json-pretty example.com
+```
+
+```json
+{
+  "objectClassName": "domain",
+  "handle": "2138514_DOMAIN_COM-VRSN",
+  "ldhName": "EXAMPLE.COM",
+  "status": [
+    "client delete prohibited",
+    "client transfer prohibited",
+    "client update prohibited"
+  ],
+  "nameservers": [
+    {
+      "objectClassName": "nameserver",
+      "ldhName": "NS1.EXAMPLE.COM"
+    }
+  ],
+  "entities": [
+    {
+      "objectClassName": "entity",
+      "handle": "292",
+      "roles": ["registrar"],
+      "vcardArray": [
+        "vcard",
+        [
+          ["version", {}, "text", "4.0"],
+          ["fn", {}, "text", "MarkMonitor Inc."]
+        ]
+      ]
+    }
+  ]
+}
+```
+
+## JSON Source Selection
+
+For domain queries that return both registry and registrar data, you can choose which data to output as JSON.
+
+### Registry Data
+
+Output data from the TLD registry (e.g., Verisign for .com):
+
+```bash
+rdap -f json --json-source registry google.com
+```
+
+<Note>
+Registry data typically includes basic domain information, nameservers, and registrar reference.
+</Note>
+
+### Registrar Data (Default)
+
+Output data from the registrar (e.g., MarkMonitor):
+
+```bash
+rdap -f json --json-source registrar google.com
+```
+
+This is the default for JSON output. If no registrar data is available, falls back to registry data.
+
+<Note>
+Registrar data typically includes detailed contact information and additional domain details.
+</Note>
+
+<Tabs>
+  <Tab title="Registry vs Registrar">
+    **Registry data** comes from the TLD operator (e.g., Verisign for .com):
+    - Basic domain information
+    - Nameservers
+    - Domain status
+    - Registrar reference
+    
+    **Registrar data** comes from the domain registrar (e.g., MarkMonitor):
+    - Detailed contact information
+    - Additional domain metadata
+    - Privacy-redacted or full contact details
+    - Registration/expiration dates
+  </Tab>
+  
+  <Tab title="Text Format Behavior">
+    In text format, the tool automatically shows:
+    1. Abuse contact from registrar (if available)
+    2. Registry server URL and data
+    3. Registrar server URL and data (if available)
+    
+    This gives you the complete picture of the domain registration.
+  </Tab>
+</Tabs>
+
+## Piping with jq
+
+Combine JSON output with `jq` for powerful data extraction:
+
+<CodeGroup>
+```bash Extract Domain Name
+rdap -f json example.com | jq -r '.ldhName'
+# Output: EXAMPLE.COM
+```
+
+```bash List Nameservers
+rdap -f json example.com | jq -r '.nameservers[].ldhName'
+# Output:
+# NS1.EXAMPLE.COM
+# NS2.EXAMPLE.COM
+```
+
+```bash Get Registrar Name
+rdap -f json example.com | jq -r '.entities[] | select(.roles[] == "registrar") | .vcardArray[1][] | select(.[0] == "fn")[3]'
+# Output: MarkMonitor Inc.
+```
+
+```bash Extract Abuse Email
+rdap -f json 8.8.8.8 | jq -r '.entities[] | select(.roles[] == "abuse") | .vcardArray[1][] | select(.[0] == "email")[3]'
+# Output: network-abuse@google.com
+```
+
+```bash Get IP Range
+rdap -f json 8.8.8.8 | jq -r '{start: .startAddress, end: .endAddress}'
+# Output:
+# {
+#   "start": "8.8.8.0",
+#   "end": "8.8.8.255"
+# }
+```
+</CodeGroup>
+
+## Comparing Formats
+
+<Tabs>
+  <Tab title="text">
+    **Best for:**
+    - Interactive terminal use
+    - Quick lookups
+    - Human reading
+    - Getting abuse contacts quickly
+    
+    **Features:**
+    - Color-coded output
+    - Formatted tables
+    - Abuse contacts highlighted
+    - Multi-layer domain data
+  </Tab>
+  
+  <Tab title="json">
+    **Best for:**
+    - Piping to jq or other tools
+    - Logging and storage
+    - Minimal file size
+    - Automated processing
+    
+    **Features:**
+    - Single-line output
+    - Raw RDAP response
+    - Machine-readable
+    - Compact format
+  </Tab>
+  
+  <Tab title="json-pretty">
+    **Best for:**
+    - Reading JSON structure
+    - Debugging
+    - Documentation
+    - Understanding RDAP format
+    
+    **Features:**
+    - Indented output
+    - Raw RDAP response
+    - Human-readable JSON
+    - Easy to parse visually
+  </Tab>
+</Tabs>
+
+## Format Examples
+
+### Same Query, Three Formats
+
+<CodeGroup>
+```bash Text Format
+rdap AS8888
+```
+
+```bash Compact JSON
+rdap -f json AS8888
+```
+
+```bash Pretty JSON
+rdap -f json-pretty AS8888
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Queries" icon="magnifying-glass" href="/cli/basic-queries">
+    Learn basic RDAP query syntax
+  </Card>
+  <Card title="Advanced Options" icon="sliders" href="/cli/advanced-options">
+    Explore timeouts, custom servers, and more
+  </Card>
+</CardGroup>

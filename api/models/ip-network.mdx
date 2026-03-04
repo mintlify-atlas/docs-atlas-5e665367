@@ -1,0 +1,190 @@
+---
+title: IP Network
+description: IP address allocation and network information from RDAP queries
+---
+
+## IpNetwork
+
+Represents IP network allocation information returned from RDAP queries for IP addresses and CIDR blocks.
+
+<ResponseField name="object_class_name" type="string">
+  Always "ip network" for IP network objects
+</ResponseField>
+
+<ResponseField name="conformance" type="array<string>">
+  RDAP conformance levels (e.g., `["rdap_level_0"]`)
+</ResponseField>
+
+<ResponseField name="notices" type="array<Notice>">
+  Server notices and terms of service. See [common fields](/api/models/domain#notice)
+</ResponseField>
+
+<ResponseField name="handle" type="string">
+  Registry-unique identifier for the network allocation
+  
+  ```rust
+  let net_handle = network.handle.unwrap_or_default();
+  ```
+</ResponseField>
+
+<ResponseField name="start_address" type="string">
+  First IP address in the network range
+  
+  ```rust
+  if let Some(start) = &network.start_address {
+      println!("Network starts at: {}", start);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="end_address" type="string">
+  Last IP address in the network range
+  
+  ```rust
+  if let Some(end) = &network.end_address {
+      println!("Network ends at: {}", end);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="ip_version" type="string">
+  IP version: "v4" or "v6"
+  
+  ```rust
+  match network.ip_version.as_deref() {
+      Some("v4") => println!("IPv4 network"),
+      Some("v6") => println!("IPv6 network"),
+      _ => println!("Unknown version"),
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Network name or identifier
+</ResponseField>
+
+<ResponseField name="network_type" type="string">
+  Type of allocation (e.g., "ALLOCATED", "ASSIGNED")
+</ResponseField>
+
+<ResponseField name="country" type="string">
+  ISO 3166-1 alpha-2 country code
+  
+  ```rust
+  if let Some(country) = &network.country {
+      println!("Allocated to: {}", country);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="parent_handle" type="string">
+  Handle of the parent network allocation
+</ResponseField>
+
+<ResponseField name="status" type="array<string>">
+  Network status values (e.g., "active", "reserved")
+</ResponseField>
+
+<ResponseField name="entities" type="array<Entity>">
+  Related entities (registrants, abuse contacts, etc.). See [Entity](/api/models/entity)
+  
+  ```rust
+  // Find abuse contact
+  let abuse = network.entities.iter()
+      .find(|e| e.roles.contains(&"abuse".to_string()))
+      .and_then(|e| e.vcard.as_ref())
+      .and_then(|v| v.email());
+  
+  if let Some(email) = abuse {
+      println!("Abuse contact: {}", email);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="remarks" type="array<Remark>">
+  Informational remarks. See [common fields](/api/models/domain#remark)
+</ResponseField>
+
+<ResponseField name="links" type="array<Link>">
+  Related links (self, related resources). See [common fields](/api/models/domain#link)
+</ResponseField>
+
+<ResponseField name="port43" type="string">
+  WHOIS server hostname for port 43 queries
+</ResponseField>
+
+<ResponseField name="events" type="array<Event>">
+  Lifecycle events (allocation, last changed, etc.). See [common fields](/api/models/domain#event)
+  
+  ```rust
+  // Find allocation date
+  let allocated = network.events.iter()
+      .find(|e| e.action == "registration" || e.action == "last changed")
+      .map(|e| &e.date);
+  ```
+</ResponseField>
+
+<ResponseField name="lang" type="string">
+  Language tag (e.g., "en", "fr")
+</ResponseField>
+
+## Example Usage
+
+```rust
+use rdap_client::RdapClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new();
+    
+    // Query an IP address
+    let result = client.query("8.8.8.8").await?;
+    
+    if let Some(network) = result.ip_network() {
+        println!("Network: {} - {}", 
+            network.start_address.as_deref().unwrap_or("N/A"),
+            network.end_address.as_deref().unwrap_or("N/A")
+        );
+        
+        println!("Name: {}", network.name.as_deref().unwrap_or("N/A"));
+        println!("Type: {}", network.network_type.as_deref().unwrap_or("N/A"));
+        println!("Country: {}", network.country.as_deref().unwrap_or("N/A"));
+        
+        // Find abuse contact
+        for entity in &network.entities {
+            if entity.roles.contains(&"abuse".to_string()) {
+                if let Some(vcard) = &entity.vcard {
+                    if let Some(email) = vcard.email() {
+                        println!("Abuse: {}", email);
+                    }
+                }
+            }
+        }
+        
+        // Show allocation date
+        for event in &network.events {
+            if event.action == "registration" {
+                println!("Allocated: {}", event.date);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## CIDR Query Example
+
+```rust
+// Query a CIDR block
+let result = client.query("192.0.2.0/24").await?;
+
+if let Some(network) = result.ip_network() {
+    println!("CIDR block information:");
+    println!("  Range: {} - {}",
+        network.start_address.as_deref().unwrap_or("N/A"),
+        network.end_address.as_deref().unwrap_or("N/A")
+    );
+    println!("  Handle: {}", network.handle.as_deref().unwrap_or("N/A"));
+}
+```

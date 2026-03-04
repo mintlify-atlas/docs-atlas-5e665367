@@ -1,0 +1,249 @@
+---
+title: Nameserver
+description: DNS nameserver information from RDAP queries
+---
+
+## Nameserver
+
+Represents DNS nameserver information returned from RDAP queries.
+
+<ResponseField name="object_class_name" type="string">
+  Always "nameserver" for nameserver objects
+</ResponseField>
+
+<ResponseField name="conformance" type="array<string>">
+  RDAP conformance levels (e.g., `["rdap_level_0"]`)
+</ResponseField>
+
+<ResponseField name="notices" type="array<Notice>">
+  Server notices and terms of service. See [common fields](/api/models/domain#notice)
+</ResponseField>
+
+<ResponseField name="handle" type="string">
+  Registry-unique identifier for the nameserver
+  
+  ```rust
+  let ns_handle = nameserver.handle.unwrap_or_default();
+  ```
+</ResponseField>
+
+<ResponseField name="ldh_name" type="string">
+  LDH (Letters, Digits, Hyphen) representation of the nameserver hostname
+  
+  ```rust
+  let hostname = nameserver.ldh_name.as_deref().unwrap_or("N/A");
+  println!("Nameserver: {}", hostname);
+  ```
+</ResponseField>
+
+<ResponseField name="unicode_name" type="string">
+  Unicode representation of the nameserver hostname (for IDN nameservers)
+</ResponseField>
+
+<ResponseField name="ip_addresses" type="IpAddressSet">
+  IP addresses for the nameserver (glue records)
+  
+  <Expandable title="IpAddressSet">
+    <ResponseField name="v4" type="array<string>">
+      IPv4 addresses
+      
+      ```rust
+      if let Some(ips) = &nameserver.ip_addresses {
+          for ipv4 in &ips.v4 {
+              println!("IPv4: {}", ipv4);
+          }
+      }
+      ```
+    </ResponseField>
+    
+    <ResponseField name="v6" type="array<string>">
+      IPv6 addresses
+      
+      ```rust
+      if let Some(ips) = &nameserver.ip_addresses {
+          for ipv6 in &ips.v6 {
+              println!("IPv6: {}", ipv6);
+          }
+      }
+      ```
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="entities" type="array<Entity>">
+  Related entities (operators, contacts). See [Entity](/api/models/entity)
+</ResponseField>
+
+<ResponseField name="status" type="array<string>">
+  Nameserver status values (e.g., "active", "linked")
+  
+  ```rust
+  if nameserver.status.contains(&"active".to_string()) {
+      println!("Nameserver is active");
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="remarks" type="array<Remark>">
+  Informational remarks. See [common fields](/api/models/domain#remark)
+</ResponseField>
+
+<ResponseField name="links" type="array<Link>">
+  Related links. See [common fields](/api/models/domain#link)
+</ResponseField>
+
+<ResponseField name="port43" type="string">
+  WHOIS server hostname for port 43 queries
+</ResponseField>
+
+<ResponseField name="events" type="array<Event>">
+  Lifecycle events. See [common fields](/api/models/domain#event)
+</ResponseField>
+
+<ResponseField name="lang" type="string">
+  Language tag (e.g., "en", "fr")
+</ResponseField>
+
+## Example Usage
+
+### Accessing Nameservers from Domain Query
+
+```rust
+use rdap_client::RdapClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new();
+    let result = client.query("example.com").await?;
+    
+    if let Some(domain) = result.domain() {
+        println!("Nameservers for {}:", 
+            domain.ldh_name.as_deref().unwrap_or("N/A")
+        );
+        
+        for ns in &domain.nameservers {
+            let hostname = ns.ldh_name.as_deref().unwrap_or("Unknown");
+            println!("\n  {}", hostname);
+            
+            // Display IP addresses (glue records)
+            if let Some(ips) = &ns.ip_addresses {
+                if !ips.v4.is_empty() {
+                    println!("    IPv4:");
+                    for ip in &ips.v4 {
+                        println!("      {}", ip);
+                    }
+                }
+                
+                if !ips.v6.is_empty() {
+                    println!("    IPv6:");
+                    for ip in &ips.v6 {
+                        println!("      {}", ip);
+                    }
+                }
+            }
+            
+            // Display status
+            if !ns.status.is_empty() {
+                println!("    Status: {}", ns.status.join(", "));
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### Direct Nameserver Query
+
+```rust
+use rdap_client::RdapClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new();
+    
+    // Query a specific nameserver
+    let result = client.query_nameserver("ns1.example.com").await?;
+    
+    if let Some(nameserver) = result.nameserver() {
+        println!("Nameserver: {}", 
+            nameserver.ldh_name.as_deref().unwrap_or("N/A")
+        );
+        
+        println!("Handle: {}", 
+            nameserver.handle.as_deref().unwrap_or("N/A")
+        );
+        
+        // Show all IP addresses
+        if let Some(ips) = &nameserver.ip_addresses {
+            println!("\nIP Addresses:");
+            for ip in &ips.v4 {
+                println!("  {}", ip);
+            }
+            for ip in &ips.v6 {
+                println!("  {}", ip);
+            }
+        }
+        
+        // Show status
+        if !nameserver.status.is_empty() {
+            println!("\nStatus: {}", nameserver.status.join(", "));
+        }
+        
+        // Show events
+        for event in &nameserver.events {
+            println!("\n{}: {}", event.action, event.date);
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### Checking for Glue Records
+
+```rust
+fn has_glue_records(ns: &Nameserver) -> bool {
+    if let Some(ips) = &ns.ip_addresses {
+        !ips.v4.is_empty() || !ips.v6.is_empty()
+    } else {
+        false
+    }
+}
+
+fn count_ip_addresses(ns: &Nameserver) -> (usize, usize) {
+    if let Some(ips) = &ns.ip_addresses {
+        (ips.v4.len(), ips.v6.len())
+    } else {
+        (0, 0)
+    }
+}
+
+// Usage
+for ns in &domain.nameservers {
+    let hostname = ns.ldh_name.as_deref().unwrap_or("Unknown");
+    
+    if has_glue_records(ns) {
+        let (v4_count, v6_count) = count_ip_addresses(ns);
+        println!("{} has {} IPv4 and {} IPv6 addresses", 
+            hostname, v4_count, v6_count);
+    } else {
+        println!("{} has no glue records", hostname);
+    }
+}
+```
+
+### Filtering Nameservers by Status
+
+```rust
+// Find all active nameservers
+let active_nameservers: Vec<_> = domain.nameservers.iter()
+    .filter(|ns| ns.status.contains(&"active".to_string()))
+    .collect();
+
+println!("Active nameservers: {}", active_nameservers.len());
+
+for ns in active_nameservers {
+    println!("  {}", ns.ldh_name.as_deref().unwrap_or("Unknown"));
+}
+```

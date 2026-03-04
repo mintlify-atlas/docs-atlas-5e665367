@@ -1,0 +1,235 @@
+---
+title: Basic Queries
+description: Learn how to perform basic RDAP queries with the rdap CLI tool
+---
+
+The RDAP CLI tool makes it easy to query registration data for domains, IPs, AS numbers, and more. The tool automatically detects the query type based on your input.
+
+## Quick Start
+
+The simplest way to use RDAP is to provide a query string:
+
+```bash
+rdap example.com
+```
+
+The tool will automatically:
+- Detect that `example.com` is a domain
+- Find the authoritative RDAP server using IANA bootstrap
+- Query the server and display formatted results
+
+## Domain Queries
+
+Query domain registration information:
+
+<CodeGroup>
+```bash Domain Query
+rdap google.com
+```
+
+```bash With Verbose Output
+rdap -v google.com
+```
+</CodeGroup>
+
+<Note>
+For domain queries, the tool automatically follows referrals to get both registry and registrar data when available.
+</Note>
+
+### Example Output
+
+```
+Abuse contact for `google.com` is `abusecomplaints@markmonitor.com`
+
+Query from https://rdap.verisign.com/com/v1/domain/google.com
+
+Domain Name: GOOGLE.COM
+Handle: 2138514_DOMAIN_COM-VRSN
+Status: client delete prohibited
+Status: client transfer prohibited
+Status: client update prohibited
+Nameserver: NS1.GOOGLE.COM
+Nameserver: NS2.GOOGLE.COM
+Registration: 1997-09-15T04:00:00Z
+Expiration: 2028-09-14T04:00:00Z
+
+Entity Handle: 292
+Role: registrar
+Name: MarkMonitor Inc.
+```
+
+## TLD Queries
+
+Query top-level domain information from IANA. The tool automatically detects single-word queries that match valid TLDs:
+
+<CodeGroup>
+```bash Query .google TLD
+rdap google
+```
+
+```bash Query .com TLD
+rdap com
+```
+
+```bash Query .io TLD
+rdap io
+```
+</CodeGroup>
+
+<Note>
+The tool uses the IANA TLD list to distinguish TLD queries from domain queries. For example, `rdap google` queries the .google TLD, while `rdap google.com` queries the google.com domain.
+</Note>
+
+### Example Output
+
+```
+Administrative contact for `google` is `iana-contact@google.com`
+Technical contact for `google` is `crr-tech@google.com`
+
+Query from https://rdap.iana.org/domain/google
+
+Domain Name: google
+Status: active
+Nameserver: ns-tld1.charlestonroadregistry.com (216.239.32.105, 2001:4860:4802:32::69)
+Delegation Signed: yes
+```
+
+## IP Address Queries
+
+Query information about IP addresses (both IPv4 and IPv6):
+
+<CodeGroup>
+```bash IPv4 Query
+rdap 8.8.8.8
+```
+
+```bash IPv6 Query
+rdap 2001:db8::1
+```
+
+```bash Shorthand IPv4
+rdap 1.1          # Auto-normalized to 1.0.0.1
+rdap 8.8          # Auto-normalized to 8.0.0.8
+```
+</CodeGroup>
+
+<Note>
+The tool automatically normalizes shorthand IP addresses. For example, `1.1` becomes `1.0.0.1`, and `1.2.3` becomes `1.2.0.3`.
+</Note>
+
+### CIDR Queries
+
+Query IP network ranges using CIDR notation:
+
+```bash
+rdap 8.8.8.0/24
+rdap 2001:db8::/32
+```
+
+### Example Output
+
+```
+Abuse contact for `8.8.8.8` is `network-abuse@google.com`
+
+Query from https://rdap.arin.net/registry/ip/8.8.8.8
+
+Handle: NET-8-8-8-0-2
+Start Address: 8.8.8.0
+End Address: 8.8.8.255
+IP Version: v4
+Name: GOGL
+Type: DIRECT ALLOCATION
+Status: active
+```
+
+## AS Number Queries
+
+Query Autonomous System (AS) number information:
+
+<CodeGroup>
+```bash With AS Prefix
+rdap AS15169
+rdap AS8888
+```
+
+```bash Without AS Prefix
+rdap 15169
+rdap 8888
+```
+</CodeGroup>
+
+<Note>
+Both formats work - the tool accepts AS numbers with or without the "AS" prefix.
+</Note>
+
+### Example Output
+
+```
+Abuse contact for `AS8888` is `abuse@xtom.com`
+
+Query from https://rdap.db.ripe.net/autnum/8888
+
+AS Number: AS8888
+Name: XTOM
+Handle: AS8888
+Status: active
+Registration: 1970-01-01T00:00:00Z
+Last Changed: 2024-08-17T11:00:40Z
+```
+
+## Verbose Mode
+
+Use the `-v` or `--verbose` flag to see detailed query information:
+
+```bash
+rdap -v AS8888
+```
+
+Verbose output includes:
+- The detected query type
+- The RDAP server being queried
+- Additional entity and link information
+
+```
+→ Query: AS8888
+→ Type:  autnum
+
+⟳ Querying RDAP server...
+
+Abuse contact for `AS8888` is `abuse@xtom.com`
+
+Query from https://rdap.db.ripe.net/autnum/8888
+
+[Full RDAP response with all entities and links]
+```
+
+## Common Options
+
+<ParamField path="-v, --verbose" type="flag">
+  Enable verbose output with additional details
+</ParamField>
+
+<ParamField path="-s, --server" type="string">
+  Specify a custom RDAP server URL instead of using bootstrap discovery
+</ParamField>
+
+<ParamField path="-t, --query-type" type="enum">
+  Explicitly specify the query type instead of auto-detection. Options: `domain`, `tld`, `ip`, `autnum`, `entity`, `nameserver`
+</ParamField>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Query Types" icon="list" href="/cli/query-types">
+    Learn about all available query types and auto-detection
+  </Card>
+  <Card title="Output Formats" icon="file-code" href="/cli/output-formats">
+    Explore JSON and formatted text output options
+  </Card>
+  <Card title="Advanced Options" icon="sliders" href="/cli/advanced-options">
+    Discover advanced CLI options and features
+  </Card>
+  <Card title="Configuration" icon="gear" href="/cli/configuration">
+    Configure bootstrap URLs and TLD overrides
+  </Card>
+</CardGroup>

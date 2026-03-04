@@ -1,0 +1,627 @@
+---
+title: Troubleshooting
+description: Common issues, error messages, and debugging tips for the RDAP client
+---
+
+## Common Issues
+
+### Bootstrap Discovery Failures
+
+#### Error: "No RDAP servers found"
+
+**Cause:** The bootstrap service couldn't find an authoritative RDAP server for your query.
+
+<Accordion title="Solutions">
+**For domain queries:**
+1. Check if the TLD is valid:
+   ```bash
+   # List all valid TLDs
+   cat ~/.config/rdap/tlds.txt | grep -i "yourtld"
+   ```
+
+2. Update your bootstrap configs:
+   ```bash
+   rdap --update
+   ```
+
+3. Use explicit server override:
+   ```bash
+   rdap -s https://rdap.example.com example.com
+   ```
+
+4. For ccTLDs not in IANA bootstrap, add to `~/.config/rdap/tlds.local.json`:
+   ```json
+   {
+     "example.tld": "https://rdap.example-registry.com/"
+   }
+   ```
+
+**For IP queries:**
+- Verify the IP format is correct (standard or CIDR)
+- Some IP ranges may not have RDAP coverage yet
+
+**For AS number queries:**
+- Ensure the AS number exists and is allocated
+- Try with or without "AS" prefix: `rdap 15169` or `rdap AS15169`
+</Accordion>
+
+#### Error: "Failed to fetch registry: HTTP 404"
+
+**Cause:** IANA bootstrap file not found or URL changed.
+
+<Accordion title="Solutions">
+1. **Update bootstrap URLs:**
+   ```bash
+   rdap --update
+   ```
+
+2. **Check IANA bootstrap service status:**
+   - Visit: https://data.iana.org/rdap/
+   - Verify files are accessible: `dns.json`, `asn.json`, `ipv4.json`, `ipv6.json`
+
+3. **Manual config override:**
+   
+   Create `~/.config/rdap/config.local.json`:
+   ```json
+   {
+     "bootstrap": {
+       "dns": "https://data.iana.org/rdap/dns.json",
+       "asn": "https://data.iana.org/rdap/asn.json",
+       "ipv4": "https://data.iana.org/rdap/ipv4.json",
+       "ipv6": "https://data.iana.org/rdap/ipv6.json"
+     },
+     "cache": {
+       "ttl_seconds": 86400
+     }
+   }
+   ```
+
+4. **Clear cache:**
+   ```bash
+   rm -rf ~/.cache/rdap/*
+   ```
+</Accordion>
+
+### Query Type Detection Issues
+
+#### Issue: Single-word query treated as domain instead of TLD
+
+**Example:** `rdap google` queries `google` as a domain instead of the `.google` TLD.
+
+<Accordion title="Solutions">
+1. **Update TLD list:**
+   ```bash
+   rdap --update
+   ```
+   This downloads the latest `tlds.txt` from IANA.
+
+2. **Explicitly specify query type:**
+   ```bash
+   rdap -t tld google
+   ```
+
+3. **Use full domain syntax for domains:**
+   ```bash
+   rdap google.com  # Clearly a domain
+   ```
+
+**How detection works:**
+- Single word → Check if it's in IANA TLD list → If yes: TLD, if no: check if numeric
+- If numeric → AS number
+- Otherwise → Domain
+</Accordion>
+
+#### Issue: IP address not recognized
+
+**Example:** Shorthand IP `1.1` not being detected as IP.
+
+<Accordion title="Solutions">
+The client supports shorthand IPs and should auto-detect them. If detection fails:
+
+1. **Use full IP notation:**
+   ```bash
+   rdap 1.0.0.1  # Instead of 1.1
+   ```
+
+2. **Explicitly specify type:**
+   ```bash
+   rdap -t ip 1.1
+   ```
+
+3. **Use CIDR notation:**
+   ```bash
+   rdap 1.1.1.0/24
+   ```
+
+**Supported shorthand formats:**
+- `1.1` → `1.0.0.1`
+- `8.8` → `8.0.0.8`
+- `192.168` → `192.168.0.0`
+</Accordion>
+
+### HTTP and Network Errors
+
+#### Error: "HTTP error: 400 Bad Request"
+
+**Cause:** The RDAP server rejected the query as malformed.
+
+<Accordion title="Solutions">
+1. **For IPv6 queries:**
+   
+   Some servers don't support host-level IPv6 queries. The client auto-retries with CIDR:
+   ```bash
+   rdap -v 2001:db8::1  # Use verbose to see retry attempts
+   ```
+   
+   If auto-retry fails, manually use CIDR:
+   ```bash
+   rdap 2001:db8::/64
+   rdap 2001:db8::/48
+   rdap 2001:db8::/32
+   ```
+
+2. **Check query format:**
+   - Domain: `example.com` (no trailing dot unless intentional)
+   - IP: Valid IPv4 or IPv6 address
+   - AS: Numeric only, AS prefix optional
+
+3. **Try different server:**
+   ```bash
+   rdap -s https://rdap.arin.net/registry 8.8.8.8
+   ```
+</Accordion>
+
+#### Error: "HTTP error: 404 Not Found"
+
+**Cause:** The resource doesn't exist in the RDAP server's database.
+
+<Accordion title="Debugging">
+1. **Verify the resource exists:**
+   - Check domain registration elsewhere (DNS lookup)
+   - Verify IP allocation (WHOIS)
+   - Confirm AS number is allocated
+
+2. **Check if you're querying the right server:**
+   ```bash
+   rdap -v example.com  # Verbose shows server URL
+   ```
+
+3. **Some registries may not have RDAP data:**
+   - Not all registries have transitioned from WHOIS to RDAP
+   - Some objects may exist in WHOIS but not RDAP yet
+
+4. **For recently registered domains:**
+   - RDAP data may lag by a few hours
+   - Try again later or use `--server` to query registrar directly
+</Accordion>
+
+#### Error: "Connection timeout" or "Connection refused"
+
+**Cause:** Network connectivity issues or server is down.
+
+<Accordion title="Solutions">
+1. **Increase timeout:**
+   ```bash
+   rdap --timeout 60 example.com  # 60 seconds
+   ```
+
+2. **Check internet connectivity:**
+   ```bash
+   ping data.iana.org
+   curl -I https://rdap.verisign.com/com/v1/
+   ```
+
+3. **Verify firewall/proxy settings:**
+   - Ensure outbound HTTPS (port 443) is allowed
+   - Check if corporate proxy is interfering
+
+4. **Try alternate bootstrap servers:**
+   
+   Edit `~/.config/rdap/config.local.json` with mirror URLs if available.
+
+5. **Use explicit server:**
+   ```bash
+   rdap -s https://rdap.verisign.com/com/v1 example.com
+   ```
+</Accordion>
+
+### Registrar Referral Issues
+
+#### Issue: Missing registrar data for domain
+
+**Cause:** Registrar doesn't provide RDAP endpoint or referral link is broken.
+
+<Accordion title="Solutions">
+1. **Check if registry provides referral link:**
+   ```bash
+   rdap -f json-pretty example.com | grep -A5 '"links"'
+   ```
+
+2. **Some registries don't include referral links:**
+   - This is compliant with RDAP spec
+   - You'll only get registry-level data
+
+3. **Disable referral following to see registry-only data:**
+   ```bash
+   rdap --no-referral example.com
+   ```
+
+4. **Manually query registrar if you know the URL:**
+   ```bash
+   rdap -s https://rdap.markmonitor.com/rdap example.com
+   ```
+</Accordion>
+
+#### Error: "Failed to fetch registrar data"
+
+**Cause:** Registrar's RDAP server is unreachable or returned an error.
+
+<Accordion title="Debugging">
+1. **View detailed error with verbose mode:**
+   ```bash
+   rdap -v example.com
+   ```
+
+2. **Client falls back to registry-only data:**
+   - The query still succeeds with registry data
+   - Warning is logged about registrar fetch failure
+
+3. **Try querying registrar directly:**
+   ```bash
+   # Get registrar URL from registry response
+   rdap --no-referral -f json example.com | jq '.links[] | select(.rel=="related")'
+   
+   # Query it directly
+   rdap -s <registrar-url> example.com
+   ```
+
+4. **Report to registrar if consistently failing:**
+   - May indicate misconfigured RDAP server
+   - Some registrars still transitioning to RDAP
+</Accordion>
+
+### Configuration Problems
+
+#### Issue: Config updates fail
+
+**Error:** "Failed to update config.json" or similar.
+
+<Accordion title="Solutions">
+1. **Check permissions:**
+   ```bash
+   ls -la ~/.config/rdap/
+   # Ensure directory is writable
+   chmod 755 ~/.config/rdap/
+   ```
+
+2. **Verify internet connectivity:**
+   ```bash
+   curl https://raw.githubusercontent.com/xtomcom/rdap/main/config/config.json
+   ```
+
+3. **Check disk space:**
+   ```bash
+   df -h ~
+   ```
+
+4. **Manual update:**
+   ```bash
+   cd ~/.config/rdap/
+   curl -O https://raw.githubusercontent.com/xtomcom/rdap/main/config/config.json
+   curl -O https://raw.githubusercontent.com/xtomcom/rdap/main/config/tlds.json
+   curl -O https://data.iana.org/TLD/tlds-alpha-by-domain.txt
+   mv tlds-alpha-by-domain.txt tlds.txt
+   ```
+</Accordion>
+
+#### Issue: Local overrides not working
+
+**Problem:** Changes to `*.local.json` files not taking effect.
+
+<Accordion title="Solutions">
+1. **Verify file location:**
+   ```bash
+   ls ~/.config/rdap/*.local.json
+   ```
+   Files must be in `~/.config/rdap/`, not `/etc/rdap/`
+
+2. **Check JSON syntax:**
+   ```bash
+   cat ~/.config/rdap/tlds.local.json | jq .
+   ```
+   If this errors, you have invalid JSON.
+
+3. **Verify file is being loaded:**
+   ```bash
+   rdap -v example.io 2>&1 | grep -i "config\|override"
+   ```
+
+4. **For TLD overrides, ensure correct format:**
+   ```json
+   {
+     "io": "https://rdap.identitydigital.services/rdap/",
+     "com.af": "https://rdap.coccaregistry.org/rdap/"
+   }
+   ```
+   Keys are TLDs (lowercase), values are base RDAP URLs with trailing slash.
+</Accordion>
+
+### Cache Issues
+
+#### Issue: Stale bootstrap data
+
+**Symptom:** Bootstrap lookups returning old or incorrect servers.
+
+<Accordion title="Solutions">
+1. **Clear cache:**
+   ```bash
+   rm -rf ~/.cache/rdap/*
+   ```
+
+2. **Update configs and cache:**
+   ```bash
+   rdap --update
+   rm -rf ~/.cache/rdap/*
+   rdap example.com  # Re-populates cache
+   ```
+
+3. **Adjust cache TTL:**
+   
+   Edit `~/.config/rdap/config.local.json`:
+   ```json
+   {
+     "cache": {
+       "ttl_seconds": 3600
+     }
+   }
+   ```
+   Lower value = more frequent bootstrap fetches, higher latency but fresher data.
+
+4. **Disable caching (for debugging):**
+   ```json
+   {
+     "cache": {
+       "ttl_seconds": 0
+     }
+   }
+   ```
+</Accordion>
+
+## Debugging Techniques
+
+### Verbose Mode
+
+<Tip>
+**Always use `-v` flag for debugging:**
+```bash
+rdap -v example.com
+```
+
+Verbose output shows:
+- Detected query type
+- Bootstrap server URLs
+- RDAP server URLs being queried
+- Retry attempts (for IPv6 CIDR)
+- Registrar referral following
+</Tip>
+
+### JSON Output for Inspection
+
+```bash
+# Pretty-printed JSON
+rdap -f json-pretty example.com | less
+
+# Pipe to jq for analysis
+rdap -f json example.com | jq '.entities[] | select(.roles[] | contains("registrar"))'
+
+# Save raw response for bug reports
+rdap -f json example.com > response.json
+```
+
+### Testing Bootstrap Matching
+
+```bash
+# Test domain matching
+rdap -v example.com 2>&1 | grep -i bootstrap
+
+# Test IP matching
+rdap -v 8.8.8.8 2>&1 | grep -i bootstrap
+
+# Test AS matching
+rdap -v AS15169 2>&1 | grep -i bootstrap
+```
+
+### Checking Configuration Precedence
+
+```bash
+# See which config file is loaded
+rdap -v example.com 2>&1 | grep -i "loaded config"
+
+# List all config files
+ls -la ~/.config/rdap/
+ls -la /etc/rdap/
+
+# View active config
+cat ~/.config/rdap/config.json
+cat ~/.config/rdap/config.local.json  # Takes precedence
+```
+
+### Network Debugging
+
+```bash
+# Test direct RDAP query with curl
+curl -H "Accept: application/rdap+json" \
+  https://rdap.verisign.com/com/v1/domain/example.com | jq .
+
+# Check bootstrap file accessibility
+curl https://data.iana.org/rdap/dns.json | jq .
+
+# Trace DNS resolution
+dig rdap.verisign.com
+
+# Check TLS/SSL
+openssl s_client -connect rdap.verisign.com:443 -servername rdap.verisign.com
+```
+
+## Error Message Reference
+
+<Accordion title="Complete Error Messages">
+
+### Bootstrap Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `No RDAP servers found` | Bootstrap matching failed | Update configs, check TLD overrides, use explicit server |
+| `Failed to fetch registry: HTTP {code}` | Bootstrap file inaccessible | Check IANA service status, update config URLs |
+| `Entity queries require explicit server` | No bootstrap for entities | Use `-s` flag with server URL |
+
+### HTTP Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `HTTP error: 400` | Malformed query | Check query format, try CIDR for IPv6 |
+| `HTTP error: 404` / `NotFound` | Resource doesn't exist | Verify resource exists, check server |
+| `HTTP error: 429` | Rate limited | Slow down queries, wait and retry |
+| `HTTP error: 500` | Server error | Try later, use alternate server |
+| `HTTP error: 503` | Service unavailable | Server maintenance, retry later |
+
+### Query Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Invalid IP address: {ip}` | IP format invalid | Use standard notation or CIDR |
+| `Invalid AS number: {asn}` | Non-numeric AS value | Ensure numeric, AS prefix optional |
+| `Invalid query: {msg}` | General validation failure | Check query format |
+
+### Network Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Connection timeout` | Network slow/unreachable | Increase timeout, check connectivity |
+| `Connection refused` | Server down or firewall | Check server status, verify port 443 open |
+| `DNS resolution failed` | DNS issues | Check DNS settings, try alternate DNS |
+
+### JSON Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `JSON parse error` | Invalid JSON from server | Report to server operator |
+| `Invalid RDAP response` | Non-JSON or malformed | Use verbose mode, save response for bug report |
+
+### I/O Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Permission denied` | Can't write config/cache | Check file permissions |
+| `No such file or directory` | Config path issue | Create directory: `mkdir -p ~/.config/rdap` |
+| `Disk full` | No space for cache | Free disk space or clear cache |
+
+</Accordion>
+
+## Performance Troubleshooting
+
+### Slow Queries
+
+<Accordion title="Optimization Tips">
+1. **Enable caching (default):**
+   - First query fetches bootstrap (slow)
+   - Subsequent queries use cache (fast)
+
+2. **Pre-warm cache:**
+   ```bash
+   rdap example.com  # Populates DNS bootstrap cache
+   rdap 8.8.8.8      # Populates IPv4 bootstrap cache
+   rdap AS15169      # Populates ASN bootstrap cache
+   ```
+
+3. **Use explicit server to skip bootstrap:**
+   ```bash
+   rdap -s https://rdap.verisign.com/com/v1 example.com
+   ```
+
+4. **Batch queries in scripts:**
+   ```bash
+   # Share client instance in library usage
+   let client = RdapClient::new()?;
+   for domain in domains {
+       client.query(&RdapRequest::new(QueryType::Domain, domain)).await?;
+   }
+   ```
+
+5. **Reduce timeout for faster failures:**
+   ```bash
+   rdap --timeout 10 example.com  # 10 seconds instead of 30
+   ```
+</Accordion>
+
+### High Memory Usage
+
+<Accordion title="Solutions">
+1. **For CLI usage:**
+   - Memory usage is minimal (typically less than 10 MB)
+   - If high, may indicate network buffering of large responses
+
+2. **For library usage with many queries:**
+   ```rust
+   // Drop large responses when done
+   let result = client.query(&request).await?;
+   // Process result
+   drop(result);  // Explicit drop if holding many in memory
+   ```
+
+3. **Limit JSON output size:**
+   ```bash
+   rdap -f json example.com | head -n 100  # Truncate large responses
+   ```
+</Accordion>
+
+## Getting Help
+
+### Before Reporting Issues
+
+<Note>
+**Information to gather:**
+
+1. **Version:**
+   ```bash
+   rdap --version
+   cargo tree | grep rdap  # For library usage
+   ```
+
+2. **Verbose output:**
+   ```bash
+   rdap -v <your-query> 2>&1 | tee debug.log
+   ```
+
+3. **Configuration:**
+   ```bash
+   ls -la ~/.config/rdap/
+   cat ~/.config/rdap/*.json
+   ```
+
+4. **Platform:**
+   ```bash
+   uname -a
+   rustc --version
+   ```
+
+5. **Network:**
+   ```bash
+   curl -v https://data.iana.org/rdap/dns.json
+   ```
+</Note>
+
+### Reporting Bugs
+
+When opening an issue:
+1. Provide minimal reproducible example
+2. Include verbose output
+3. Attach JSON response if relevant (`-f json-pretty`)
+4. Specify platform and version
+5. Describe expected vs actual behavior
+
+### Community Support
+
+- **GitHub Issues**: [https://github.com/xtomcom/rdap/issues](https://github.com/xtomcom/rdap/issues)
+- **Documentation**: This site and README.md
+- **RDAP Specification**: IETF RFCs 7480-7484

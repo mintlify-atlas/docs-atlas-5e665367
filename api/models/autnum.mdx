@@ -1,0 +1,220 @@
+---
+title: Autonomous System
+description: AS number allocation and routing information from RDAP queries
+---
+
+## Autnum
+
+Represents Autonomous System Number (ASN) information returned from RDAP queries.
+
+<ResponseField name="object_class_name" type="string">
+  Always "autnum" for AS number objects
+</ResponseField>
+
+<ResponseField name="conformance" type="array<string>">
+  RDAP conformance levels (e.g., `["rdap_level_0"]`)
+</ResponseField>
+
+<ResponseField name="notices" type="array<Notice>">
+  Server notices and terms of service. See [common fields](/api/models/domain#notice)
+</ResponseField>
+
+<ResponseField name="handle" type="string">
+  Registry-unique identifier for the AS allocation
+  
+  ```rust
+  let as_handle = autnum.handle.unwrap_or_default();
+  ```
+</ResponseField>
+
+<ResponseField name="start_autnum" type="number">
+  First AS number in the range
+  
+  ```rust
+  if let Some(asn) = autnum.start_autnum {
+      println!("AS{}", asn);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="end_autnum" type="number">
+  Last AS number in the range (usually same as start_autnum for single AS allocations)
+  
+  ```rust
+  if autnum.start_autnum == autnum.end_autnum {
+      println!("Single AS allocation");
+  } else {
+      println!("AS range: {} - {}", 
+          autnum.start_autnum.unwrap_or(0),
+          autnum.end_autnum.unwrap_or(0)
+      );
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="ip_version" type="string">
+  IP version supported ("v4", "v6", or both)
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  AS name or description
+  
+  ```rust
+  println!("AS Name: {}", autnum.name.as_deref().unwrap_or("N/A"));
+  ```
+</ResponseField>
+
+<ResponseField name="as_type" type="string">
+  Type of AS allocation
+</ResponseField>
+
+<ResponseField name="status" type="array<string>">
+  AS status values (e.g., "active", "reserved")
+</ResponseField>
+
+<ResponseField name="country" type="string">
+  ISO 3166-1 alpha-2 country code where AS is registered
+  
+  ```rust
+  if let Some(country) = &autnum.country {
+      println!("Country: {}", country);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="entities" type="array<Entity>">
+  Related entities (registrants, technical contacts, abuse contacts). See [Entity](/api/models/entity)
+  
+  ```rust
+  // Find abuse contact
+  let abuse = autnum.entities.iter()
+      .find(|e| e.roles.contains(&"abuse".to_string()))
+      .and_then(|e| e.vcard.as_ref())
+      .and_then(|v| v.email());
+  
+  if let Some(email) = abuse {
+      println!("Abuse: {}", email);
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="remarks" type="array<Remark>">
+  Informational remarks about the AS. See [common fields](/api/models/domain#remark)
+</ResponseField>
+
+<ResponseField name="links" type="array<Link>">
+  Related links (self, related resources). See [common fields](/api/models/domain#link)
+</ResponseField>
+
+<ResponseField name="port43" type="string">
+  WHOIS server hostname for port 43 queries
+</ResponseField>
+
+<ResponseField name="events" type="array<Event>">
+  Lifecycle events (allocation, last update, etc.). See [common fields](/api/models/domain#event)
+  
+  ```rust
+  // Find allocation date
+  let allocated = autnum.events.iter()
+      .find(|e| e.action == "registration")
+      .map(|e| &e.date);
+  ```
+</ResponseField>
+
+<ResponseField name="lang" type="string">
+  Language tag (e.g., "en", "fr")
+</ResponseField>
+
+## Example Usage
+
+```rust
+use rdap_client::RdapClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new();
+    
+    // Query an AS number (with or without "AS" prefix)
+    let result = client.query("15169").await?;
+    // or: client.query("AS15169").await?;
+    
+    if let Some(autnum) = result.autnum() {
+        // Display AS information
+        if let Some(asn) = autnum.start_autnum {
+            println!("AS{}", asn);
+        }
+        
+        println!("Name: {}", autnum.name.as_deref().unwrap_or("N/A"));
+        println!("Country: {}", autnum.country.as_deref().unwrap_or("N/A"));
+        
+        // Show status
+        if !autnum.status.is_empty() {
+            println!("Status: {}", autnum.status.join(", "));
+        }
+        
+        // Find and display contacts
+        for entity in &autnum.entities {
+            if let Some(vcard) = &entity.vcard {
+                let roles = entity.roles.join(", ");
+                println!("{}:", roles);
+                
+                if let Some(name) = vcard.name() {
+                    println!("  Name: {}", name);
+                }
+                if let Some(email) = vcard.email() {
+                    println!("  Email: {}", email);
+                }
+            }
+        }
+        
+        // Show allocation date
+        for event in &autnum.events {
+            if event.action == "registration" {
+                println!("Allocated: {}", event.date);
+            }
+            if event.action == "last changed" {
+                println!("Last updated: {}", event.date);
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## Finding Abuse Contacts
+
+```rust
+use rdap_client::RdapClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new();
+    let result = client.query("15169").await?;
+    
+    if let Some(autnum) = result.autnum() {
+        // Find abuse contact entity
+        for entity in &autnum.entities {
+            if entity.roles.contains(&"abuse".to_string()) {
+                if let Some(vcard) = &entity.vcard {
+                    println!("Abuse Contact:");
+                    
+                    if let Some(name) = vcard.name() {
+                        println!("  Name: {}", name);
+                    }
+                    
+                    if let Some(email) = vcard.email() {
+                        println!("  Email: {}", email);
+                    }
+                    
+                    if let Some(tel) = vcard.tel() {
+                        println!("  Phone: {}", tel);
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+```

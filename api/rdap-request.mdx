@@ -1,0 +1,322 @@
+---
+title: RdapRequest
+description: RDAP request builder for constructing queries
+---
+
+## Overview
+
+The `RdapRequest` type represents an RDAP query request. It encapsulates the query type, query string, and optional server URL for targeted queries.
+
+## Structure
+
+```rust
+pub struct RdapRequest {
+    pub query_type: QueryType,
+    pub query: String,
+    pub server: Option<Url>,
+}
+```
+
+<ResponseField name="query_type" type="QueryType">
+  The type of RDAP query to perform (Domain, IP, Autnum, etc.)
+</ResponseField>
+
+<ResponseField name="query" type="String">
+  The query string (domain name, IP address, AS number, etc.)
+</ResponseField>
+
+<ResponseField name="server" type="Option<Url>">
+  Optional specific RDAP server URL. If not set, uses bootstrap discovery.
+</ResponseField>
+
+## Constructor
+
+### new()
+
+Create a new RDAP request.
+
+```rust
+pub fn new(query_type: QueryType, query: impl Into<String>) -> Self
+```
+
+<ParamField path="query_type" type="QueryType" required>
+  The type of query to perform
+</ParamField>
+
+<ParamField path="query" type="impl Into<String>" required>
+  The query string (automatically converted from &str, String, etc.)
+</ParamField>
+
+<ResponseField name="RdapRequest" type="RdapRequest">
+  Returns a new request with no specific server set
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapRequest, QueryType};
+
+// Domain query
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+
+// IP query
+let request = RdapRequest::new(QueryType::Ip, "8.8.8.8");
+
+// AS number query
+let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+
+// Entity query
+let request = RdapRequest::new(QueryType::Entity, "ENTITY-123");
+```
+
+## Configuration Methods
+
+### with_server()
+
+Set a specific RDAP server URL to query instead of using bootstrap discovery.
+
+```rust
+pub fn with_server(self, server: Url) -> Self
+```
+
+<ParamField path="server" type="Url" required>
+  The base URL of the RDAP server to query
+</ParamField>
+
+<ResponseField name="RdapRequest" type="RdapRequest">
+  Returns self for method chaining
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapRequest, QueryType};
+use url::Url;
+
+let request = RdapRequest::new(QueryType::Domain, "example.com")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?};
+```
+
+## URL Building
+
+### build_url()
+
+Build the full RDAP query URL from a base server URL.
+
+```rust
+pub fn build_url(&self, base_url: &Url) -> Result<Url>
+```
+
+<ParamField path="base_url" type="&Url" required>
+  The base URL of the RDAP server
+</ParamField>
+
+<ResponseField name="Result<Url>" type="Result">
+  Returns the complete RDAP query URL or an error
+</ResponseField>
+
+**URL Patterns:**
+
+- **Domain/TLD**: `{base}/domain/{encoded_query}`
+- **IP**: `{base}/ip/{query}` (no encoding)
+- **Autnum**: `{base}/autnum/{asn}` (strips "AS" prefix)
+- **Entity**: `{base}/entity/{encoded_query}`
+- **Nameserver**: `{base}/nameserver/{encoded_query}`
+- **Help**: `{base}/help`
+- **Domain Search**: `{base}/domains?name={encoded_query}`
+- **Domain Search by NS**: `{base}/domains?nsLdhName={encoded_query}`
+- **Domain Search by NS IP**: `{base}/domains?nsIp={query}`
+- **Nameserver Search**: `{base}/nameservers?name={encoded_query}`
+- **Nameserver Search by IP**: `{base}/nameservers?ip={query}`
+- **Entity Search**: `{base}/entities?fn={encoded_query}`
+- **Entity Search by Handle**: `{base}/entities?handle={encoded_query}`
+
+**Example:**
+
+```rust
+use rdap::{RdapRequest, QueryType};
+use url::Url;
+
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let base = Url::parse("https://rdap.verisign.com/com/v1/")?;
+let url = request.build_url(&base)?;
+
+assert_eq!(url.as_str(), "https://rdap.verisign.com/com/v1/domain/example.com");
+```
+
+**IPv6 Example:**
+
+```rust
+use rdap::{RdapRequest, QueryType};
+use url::Url;
+
+let request = RdapRequest::new(QueryType::Ip, "2001:db8::1");
+let base = Url::parse("https://rdap.apnic.net/")?;
+let url = request.build_url(&base)?;
+
+assert_eq!(url.as_str(), "https://rdap.apnic.net/ip/2001:db8::1");
+```
+
+**AS Number Example:**
+
+```rust
+use rdap::{RdapRequest, QueryType};
+use url::Url;
+
+let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+let base = Url::parse("https://rdap.arin.net/registry/")?;
+let url = request.build_url(&base)?;
+
+// "AS" prefix is automatically stripped
+assert_eq!(url.as_str(), "https://rdap.arin.net/registry/autnum/15169");
+```
+
+## Query Type Detection
+
+### detect_type()
+
+Automatically detect the query type from a query string.
+
+```rust
+pub fn detect_type(query: &str) -> Result<QueryType>
+```
+
+<ParamField path="query" type="&str" required>
+  The query string to analyze
+</ParamField>
+
+<ResponseField name="Result<QueryType>" type="Result">
+  Returns the detected query type or an error
+</ResponseField>
+
+**Detection Logic:**
+
+1. **AS Number**: Starts with "AS" followed by digits, or pure digits ≤ 4,294,967,294
+2. **IP Address**: Matches IPv4, IPv6, or CIDR notation patterns
+3. **TLD**: Single word without dots (when using `detect_type_with_tld_check`)
+4. **Domain**: Default fallback for everything else
+
+**Example:**
+
+```rust
+use rdap::{RdapRequest, QueryType};
+
+// Domain
+let query_type = RdapRequest::detect_type("example.com")?;
+assert_eq!(query_type, QueryType::Domain);
+
+// IPv4
+let query_type = RdapRequest::detect_type("192.0.2.1")?;
+assert_eq!(query_type, QueryType::Ip);
+
+// IPv6
+let query_type = RdapRequest::detect_type("2001:db8::1")?;
+assert_eq!(query_type, QueryType::Ip);
+
+// AS Number with prefix
+let query_type = RdapRequest::detect_type("AS15169")?;
+assert_eq!(query_type, QueryType::Autnum);
+
+// AS Number without prefix
+let query_type = RdapRequest::detect_type("15169")?;
+assert_eq!(query_type, QueryType::Autnum);
+```
+
+### detect_type_with_tld_check()
+
+Detect query type with custom TLD validation.
+
+```rust
+pub fn detect_type_with_tld_check<F>(query: &str, is_tld: F) -> Result<QueryType>
+where
+    F: Fn(&str) -> bool,
+```
+
+<ParamField path="query" type="&str" required>
+  The query string to analyze
+</ParamField>
+
+<ParamField path="is_tld" type="F: Fn(&str) -> bool" required>
+  Function that returns true if the input is a valid TLD
+</ParamField>
+
+<ResponseField name="Result<QueryType>" type="Result">
+  Returns the detected query type or an error
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapRequest, QueryType};
+use std::collections::HashSet;
+
+let tlds: HashSet<String> = ["com", "org", "net", "google"]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+let is_tld = |s: &str| tlds.contains(s);
+
+// Detected as TLD (single word that's in the list)
+let query_type = RdapRequest::detect_type_with_tld_check("google", is_tld)?;
+assert_eq!(query_type, QueryType::Tld);
+
+// Detected as Domain (has dot)
+let query_type = RdapRequest::detect_type_with_tld_check("google.com", is_tld)?;
+assert_eq!(query_type, QueryType::Domain);
+```
+
+## Usage Patterns
+
+### Simple Query
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let result = client.query(&request).await?;
+```
+
+### Query with Specific Server
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+```
+
+### Auto-Detect Query Type
+
+```rust
+use rdap::{RdapClient, RdapRequest};
+
+let client = RdapClient::new()?;
+let query_type = RdapRequest::detect_type("example.com")?;
+let request = RdapRequest::new(query_type, "example.com");
+let result = client.query(&request).await?;
+```
+
+### Search Query
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::DomainSearch, "example*")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::DomainSearch(search) => {
+        for domain in search.domains {
+            println!("Found: {:?}", domain.ldh_name);
+        }
+    }
+    _ => println!("Unexpected result type"),
+}
+```

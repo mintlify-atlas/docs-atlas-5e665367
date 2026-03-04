@@ -1,0 +1,342 @@
+---
+title: Advanced Options
+description: Advanced CLI options for custom servers, timeouts, and referral control
+---
+
+Beyond basic queries, the RDAP CLI offers advanced options for custom servers, timeout control, SSL configuration, and referral handling.
+
+## Custom RDAP Server
+
+Bypass bootstrap discovery and query a specific RDAP server directly.
+
+```bash
+rdap -s https://rdap.verisign.com/com/v1 example.com
+```
+
+<ParamField path="-s, --server" type="string">
+  URL of the RDAP server to query (e.g., `https://rdap.verisign.com/com/v1`)
+</ParamField>
+
+### When to Use Custom Servers
+
+<CardGroup cols={2}>
+  <Card title="Testing" icon="flask">
+    Test against development or staging RDAP servers
+    ```bash
+    rdap -s https://rdap-test.example.com test.com
+    ```
+  </Card>
+  
+  <Card title="Private Servers" icon="lock">
+    Query internal or private RDAP servers
+    ```bash
+    rdap -s https://internal-rdap.corp.local internal.domain
+    ```
+  </Card>
+  
+  <Card title="Performance" icon="gauge-high">
+    Skip bootstrap lookup when you know the server
+    ```bash
+    rdap -s https://rdap.db.ripe.net AS8888
+    ```
+  </Card>
+  
+  <Card title="Entity Queries" icon="user">
+    Required for entity queries (no global bootstrap)
+    ```bash
+    rdap -s https://rdap.db.ripe.net -t entity XTOM-RIPE
+    ```
+  </Card>
+</CardGroup>
+
+### Server URL Requirements
+
+<Note>
+The server URL should be the base RDAP endpoint. The tool will append the appropriate path based on query type:
+- Domain: `/domain/{name}`
+- IP: `/ip/{address}`
+- Autnum: `/autnum/{number}`
+- Entity: `/entity/{handle}`
+</Note>
+
+<CodeGroup>
+```bash Correct
+rdap -s https://rdap.verisign.com/com/v1 example.com
+# Queries: https://rdap.verisign.com/com/v1/domain/example.com
+```
+
+```bash Incorrect
+rdap -s https://rdap.verisign.com/com/v1/domain/example.com example.com
+# This doubles the path!
+```
+</CodeGroup>
+
+## Timeout Configuration
+
+Control how long to wait for RDAP server responses.
+
+```bash
+rdap --timeout 60 example.com
+```
+
+<ParamField path="--timeout" type="integer" default="30">
+  Timeout in seconds for RDAP server requests
+</ParamField>
+
+### Use Cases
+
+<Tabs>
+  <Tab title="Slow Servers">
+    Some RDAP servers respond slowly. Increase timeout for reliability:
+    ```bash
+    rdap --timeout 60 example.com
+    ```
+  </Tab>
+  
+  <Tab title="Fast Fail">
+    For health checks or monitoring, use shorter timeouts:
+    ```bash
+    rdap --timeout 5 example.com
+    ```
+  </Tab>
+  
+  <Tab title="Scripting">
+    Set consistent timeouts in scripts:
+    ```bash
+    #!/bin/bash
+    TIMEOUT=30
+    rdap --timeout $TIMEOUT example.com
+    ```
+  </Tab>
+</Tabs>
+
+## Referral Control
+
+For domain queries, control whether to follow referrals to registrar RDAP servers.
+
+```bash
+rdap --no-referral google.com
+```
+
+<ParamField path="--no-referral" type="flag">
+  Disable automatic following of registrar referrals for domain queries
+</ParamField>
+
+### How Referrals Work
+
+<Steps>
+  <Step title="Registry Query">
+    First, query the TLD registry (e.g., Verisign for .com domains)
+  </Step>
+  
+  <Step title="Referral Detection">
+    Check if registry response includes a registrar RDAP server link
+  </Step>
+  
+  <Step title="Registrar Query">
+    If enabled (default), automatically query the registrar server for detailed data
+  </Step>
+  
+  <Step title="Combined Display">
+    Show both registry and registrar data in output
+  </Step>
+</Steps>
+
+### With Referrals (Default)
+
+```bash
+rdap google.com
+```
+
+```
+Abuse contact for `google.com` is `abusecomplaints@markmonitor.com`
+
+Query from https://rdap.verisign.com/com/v1/domain/google.com
+
+[Registry data]
+
+Query from https://rdap.markmonitor.com/rdap/domain/GOOGLE.COM
+
+[Registrar data with detailed contacts]
+```
+
+### Without Referrals
+
+```bash
+rdap --no-referral google.com
+```
+
+```
+Query from https://rdap.verisign.com/com/v1/domain/google.com
+
+[Registry data only]
+```
+
+<Note>
+Disabling referrals is faster but you'll only get registry-level data, which may have redacted contact information.
+</Note>
+
+## SSL Configuration
+
+Control SSL certificate verification (use with caution).
+
+```bash
+rdap -k https://rdap-dev.example.com test.com
+```
+
+<ParamField path="-k, --insecure" type="flag">
+  Disable SSL certificate verification
+</ParamField>
+
+<Warning>
+Only use `--insecure` for testing or development. Never disable SSL verification in production or when querying public RDAP servers.
+</Warning>
+
+### Use Cases
+
+- Testing against development servers with self-signed certificates
+- Internal corporate RDAP servers with custom CAs
+- Debugging SSL issues
+
+```bash
+# Test server with self-signed cert
+rdap -k -s https://localhost:8443 test.local
+```
+
+## Verbose Output
+
+Enable detailed debugging information.
+
+```bash
+rdap -v AS8888
+```
+
+<ParamField path="-v, --verbose" type="flag">
+  Enable verbose output with query details and additional information
+</ParamField>
+
+Verbose mode shows:
+- Detected query type
+- Normalized query (e.g., for IP shorthand)
+- RDAP server being queried
+- All entities and links in RDAP response
+- Additional metadata and notices
+
+```
+→ Query: AS8888
+→ Type:  autnum
+→ Server: https://rdap.db.ripe.net
+
+⟳ Querying RDAP server...
+
+[Full detailed output follows]
+```
+
+## Combining Options
+
+All options can be combined for complex queries:
+
+<CodeGroup>
+```bash Custom Server + Timeout
+rdap -s https://rdap.verisign.com/com/v1 --timeout 60 example.com
+```
+
+```bash No Referral + JSON
+rdap --no-referral -f json google.com
+```
+
+```bash Verbose + Custom Server
+rdap -v -s https://rdap.db.ripe.net AS8888
+```
+
+```bash All Options
+rdap -v -s https://rdap.test.com --timeout 30 -k --no-referral -f json-pretty test.com
+```
+</CodeGroup>
+
+## Environment-Specific Examples
+
+### Development
+
+```bash
+# Query dev server with relaxed SSL, short timeout
+rdap -k -s https://rdap-dev.corp.local --timeout 10 test.domain
+```
+
+### Production Monitoring
+
+```bash
+# Fast checks with JSON output
+rdap --timeout 5 -f json example.com | jq -r '.status[]'
+```
+
+### Debugging
+
+```bash
+# Maximum verbosity, pretty JSON
+rdap -v -f json-pretty example.com > debug.json
+```
+
+### Scripting
+
+```bash
+#!/bin/bash
+# Reliable batch queries
+for domain in $(cat domains.txt); do
+  rdap --timeout 30 --no-referral -f json "$domain" >> results.jsonl
+  sleep 1
+done
+```
+
+## Complete Options Reference
+
+<ParamField path="query" type="string" required>
+  The domain, IP, AS number, or other identifier to query
+</ParamField>
+
+<ParamField path="-s, --server" type="string">
+  RDAP server URL (bypasses bootstrap discovery)
+</ParamField>
+
+<ParamField path="-t, --query-type" type="enum">
+  Explicitly specify query type: `domain`, `tld`, `ip`, `autnum`, `entity`, `nameserver`, or search types
+</ParamField>
+
+<ParamField path="-f, --format" type="enum" default="text">
+  Output format: `text`, `json`, or `json-pretty`
+</ParamField>
+
+<ParamField path="-v, --verbose" type="flag">
+  Enable verbose output
+</ParamField>
+
+<ParamField path="--timeout" type="integer" default="30">
+  Timeout in seconds
+</ParamField>
+
+<ParamField path="-k, --insecure" type="flag">
+  Disable SSL certificate verification
+</ParamField>
+
+<ParamField path="--no-referral" type="flag">
+  Disable following registrar referrals for domain queries
+</ParamField>
+
+<ParamField path="--json-source" type="enum" default="registrar">
+  JSON output source for domain queries: `registry` or `registrar`
+</ParamField>
+
+<ParamField path="-u, --update" type="flag">
+  Update configuration files from GitHub (see [Configuration](/cli/configuration))
+</ParamField>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/cli/configuration">
+    Learn about config files, TLD overrides, and updates
+  </Card>
+  <Card title="Output Formats" icon="file-code" href="/cli/output-formats">
+    Master JSON and text output formatting
+  </Card>
+</CardGroup>

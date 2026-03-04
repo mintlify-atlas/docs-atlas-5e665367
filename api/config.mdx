@@ -1,0 +1,301 @@
+---
+title: Configuration API
+description: Configuration management for RDAP client
+---
+
+## Overview
+
+The configuration system manages RDAP client settings with a priority-based loading mechanism. Configuration files are loaded from multiple locations with user overrides taking precedence over system defaults.
+
+### Configuration Priority
+
+Configuration files are loaded in the following order (highest to lowest priority):
+
+1. `~/.config/rdap/*.local.json` - User local overrides (never updated automatically)
+2. `~/.config/rdap/*.json` - Downloaded configurations
+3. `/etc/rdap/*.json` - System-wide configurations
+4. Built-in defaults - Embedded in the binary
+
+## Config
+
+The main configuration structure for the RDAP client.
+
+<ResponseField name="bootstrap" type="BootstrapConfig" required>
+  Bootstrap URLs configuration for IANA RDAP services
+</ResponseField>
+
+<ResponseField name="cache" type="CacheConfig" required>
+  Cache settings for bootstrap files
+</ResponseField>
+
+### BootstrapConfig
+
+<ResponseField name="dns" type="string" required>
+  Bootstrap URL for DNS (domain) queries. Default: `https://data.iana.org/rdap/dns.json`
+</ResponseField>
+
+<ResponseField name="asn" type="string" required>
+  Bootstrap URL for AS number queries. Default: `https://data.iana.org/rdap/asn.json`
+</ResponseField>
+
+<ResponseField name="ipv4" type="string" required>
+  Bootstrap URL for IPv4 address queries. Default: `https://data.iana.org/rdap/ipv4.json`
+</ResponseField>
+
+<ResponseField name="ipv6" type="string" required>
+  Bootstrap URL for IPv6 address queries. Default: `https://data.iana.org/rdap/ipv6.json`
+</ResponseField>
+
+### CacheConfig
+
+<ResponseField name="ttl_seconds" type="u64" required>
+  Time-to-live for cached bootstrap files in seconds. Default: `86400` (24 hours)
+</ResponseField>
+
+## Functions
+
+### load()
+
+Loads configuration with priority: local > user > system > builtin.
+
+```rust
+pub fn load() -> Result<Config>
+```
+
+The function searches for configuration files in the following order:
+
+1. `~/.config/rdap/config.local.json`
+2. `~/.config/rdap/config.json`
+3. `/etc/rdap/config.json`
+4. Built-in default configuration
+
+**Returns:** The first valid configuration found, or built-in defaults if none exist.
+
+### save()
+
+Saves the configuration to the user config directory.
+
+```rust
+pub fn save(&self) -> Result<()>
+```
+
+Writes the configuration to `~/.config/rdap/config.json` in pretty-printed JSON format.
+
+### user_config_dir()
+
+Returns the user configuration directory path.
+
+```rust
+pub fn user_config_dir() -> Result<PathBuf>
+```
+
+**Returns:** `~/.config/rdap/` on all platforms (determined by `$HOME` environment variable)
+
+### update_configs()
+
+Updates configuration files from GitHub and IANA sources.
+
+```rust
+pub async fn update_configs() -> Result<UpdateResult>
+```
+
+Downloads and updates:
+- `config.json` from GitHub repository
+- `tlds.json` from GitHub repository
+- `tlds.txt` from IANA (official TLD list)
+
+Files are validated before saving. Only updates `~/.config/rdap/*.json` files, never touches `*.local.json` overrides.
+
+**Returns:** `UpdateResult` with status of each update operation
+
+<ResponseField name="config_updated" type="bool">
+  Whether config.json was successfully updated
+</ResponseField>
+
+<ResponseField name="config_error" type="Option<String>">
+  Error message if config.json update failed
+</ResponseField>
+
+<ResponseField name="tlds_updated" type="bool">
+  Whether tlds.json was successfully updated
+</ResponseField>
+
+<ResponseField name="tlds_error" type="Option<String>">
+  Error message if tlds.json update failed
+</ResponseField>
+
+<ResponseField name="tld_list_updated" type="bool">
+  Whether tlds.txt was successfully updated
+</ResponseField>
+
+<ResponseField name="tld_list_error" type="Option<String>">
+  Error message if tlds.txt update failed
+</ResponseField>
+
+## TLD Overrides
+
+### TldOverrides
+
+A type alias for `HashMap<String, String>` mapping TLD/SLD to RDAP server URLs.
+
+```rust
+pub type TldOverrides = HashMap<String, String>;
+```
+
+Used to override the IANA bootstrap for specific TLDs that don't respond correctly or require special handling.
+
+### load_tld_overrides()
+
+Loads TLD overrides with priority: local merged on top of base.
+
+```rust
+pub fn load_tld_overrides() -> Result<TldOverrides>
+```
+
+Loading strategy:
+1. Load base overrides (user > system > builtin)
+2. Merge local overrides from `tlds.local.json` on top
+
+This allows users to add custom TLD mappings without affecting auto-updated configurations.
+
+### save_tld_overrides()
+
+Saves TLD overrides to the user config directory.
+
+```rust
+pub fn save_tld_overrides(overrides: &TldOverrides) -> Result<()>
+```
+
+Writes to `~/.config/rdap/tlds.json`.
+
+### lookup_tld_override()
+
+Looks up RDAP server URL for a domain from TLD overrides.
+
+```rust
+pub fn lookup_tld_override(overrides: &TldOverrides, domain: &str) -> Option<Url>
+```
+
+<ParamField path="overrides" type="&TldOverrides" required>
+  TLD override mappings
+</ParamField>
+
+<ParamField path="domain" type="&str" required>
+  Domain name to look up (e.g., "example.com.af")
+</ParamField>
+
+Tries matching from most specific to least specific. For "foo.com.af", tries:
+1. "foo.com.af"
+2. "com.af"
+3. "af"
+
+**Returns:** First matching RDAP server URL, or `None` if no match found.
+
+## TLD List
+
+### TldList
+
+IANA TLD list containing all valid top-level domains.
+
+```rust
+pub struct TldList
+```
+
+### load()
+
+Loads the IANA TLD list with priority: user > system > builtin.
+
+```rust
+pub fn load() -> Result<TldList>
+```
+
+Searches for `tlds.txt` in:
+1. `~/.config/rdap/tlds.txt`
+2. `/etc/rdap/tlds.txt`
+3. Built-in TLD list (embedded)
+
+### is_tld()
+
+Checks if a string is a valid TLD.
+
+```rust
+pub fn is_tld(&self, query: &str) -> bool
+```
+
+<ParamField path="query" type="&str" required>
+  Query string to check (case-insensitive)
+</ParamField>
+
+**Returns:** `true` if the query matches a valid TLD
+
+### len()
+
+Returns the number of TLDs in the list.
+
+```rust
+pub fn len(&self) -> usize
+```
+
+**Returns:** Number of valid TLDs (typically 1000+)
+
+## Configuration File Format
+
+### config.json
+
+```json
+{
+  "bootstrap": {
+    "dns": "https://data.iana.org/rdap/dns.json",
+    "asn": "https://data.iana.org/rdap/asn.json",
+    "ipv4": "https://data.iana.org/rdap/ipv4.json",
+    "ipv6": "https://data.iana.org/rdap/ipv6.json"
+  },
+  "cache": {
+    "ttl_seconds": 86400
+  }
+}
+```
+
+### tlds.json
+
+Maps TLD/SLD to RDAP server URLs:
+
+```json
+{
+  "io": "https://rdap.identitydigital.services/rdap/",
+  "com.af": "https://rdap.coccaregistry.org/rdap/",
+  "edu.af": "https://rdap.coccaregistry.org/rdap/"
+}
+```
+
+### tlds.txt
+
+IANA TLD list (plain text, one TLD per line):
+
+```
+# Version 2024010100
+AAA
+ABBOTT
+ABBVIE
+COM
+NET
+ORG
+```
+
+## Constants
+
+<ResponseField name="CONFIG_UPDATE_URL" type="&str">
+  GitHub URL for config.json updates: `https://raw.githubusercontent.com/xtomcom/rdap/main/config/config.json`
+</ResponseField>
+
+<ResponseField name="TLDS_UPDATE_URL" type="&str">
+  GitHub URL for tlds.json updates: `https://raw.githubusercontent.com/xtomcom/rdap/main/config/tlds.json`
+</ResponseField>
+
+<ResponseField name="TLD_LIST_UPDATE_URL" type="&str">
+  IANA URL for TLD list updates: `https://data.iana.org/TLD/tlds-alpha-by-domain.txt`
+</ResponseField>
+
+<ResponseField name="IANA_RDAP_URL" type="&str">
+  IANA RDAP server for TLD queries: `https://rdap.iana.org/`
+</ResponseField>

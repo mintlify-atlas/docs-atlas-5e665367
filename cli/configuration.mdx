@@ -1,0 +1,491 @@
+---
+title: Configuration
+description: Configure bootstrap URLs, TLD overrides, and cache settings
+---
+
+The RDAP CLI uses a flexible configuration system with built-in defaults, allowing you to customize bootstrap URLs and add TLD overrides without modifying any code.
+
+## Configuration Files
+
+The tool uses two main configuration files:
+
+<CardGroup cols={2}>
+  <Card title="config.json" icon="gear">
+    Bootstrap URLs for IANA RDAP service discovery
+    - DNS (domains)
+    - ASN (AS numbers)
+    - IPv4 addresses
+    - IPv6 addresses
+  </Card>
+  
+  <Card title="tlds.json" icon="globe">
+    TLD-specific RDAP server overrides
+    - ccTLDs not in IANA bootstrap
+    - Second-level domains (e.g., `.com.af`)
+    - Custom TLD servers
+  </Card>
+</CardGroup>
+
+## Configuration Priority
+
+Configurations are loaded in priority order (highest to lowest):
+
+<Steps>
+  <Step title="User Local Overrides">
+    `~/.config/rdap/*.local.json`
+    
+    Local override files that are **never modified** by `rdap --update`. Use these for your custom settings.
+  </Step>
+  
+  <Step title="User Config">
+    `~/.config/rdap/*.json`
+    
+    Downloaded configuration files, updated via `rdap --update`.
+  </Step>
+  
+  <Step title="System Config">
+    `/etc/rdap/*.json`
+    
+    System-wide configuration files (requires root to modify).
+  </Step>
+  
+  <Step title="Built-in Defaults">
+    Embedded in the binary at compile time from `config/` directory.
+  </Step>
+</Steps>
+
+<Note>
+You don't need any config files to use RDAP. The tool ships with built-in defaults that work out of the box.
+</Note>
+
+## Update Configuration
+
+Download the latest configuration files from the GitHub repository:
+
+```bash
+rdap --update
+# or
+rdap -u
+```
+
+### What Gets Updated
+
+<Tabs>
+  <Tab title="config.json">
+    **Downloaded from:** `https://raw.githubusercontent.com/xtomcom/rdap/main/config/config.json`
+    
+    **Contains:**
+    ```json
+    {
+      "bootstrap": {
+        "dns": "https://data.iana.org/rdap/dns.json",
+        "asn": "https://data.iana.org/rdap/asn.json",
+        "ipv4": "https://data.iana.org/rdap/ipv4.json",
+        "ipv6": "https://data.iana.org/rdap/ipv6.json"
+      },
+      "cache": {
+        "ttl_seconds": 86400
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="tlds.json">
+    **Downloaded from:** `https://raw.githubusercontent.com/xtomcom/rdap/main/config/tlds.json`
+    
+    **Contains:** Mappings of TLDs to RDAP servers
+    ```json
+    {
+      "io": "https://rdap.identitydigital.services/rdap/",
+      "ac": "https://rdap.nic.ac/",
+      "com.af": "https://rdap.coccaregistry.org/",
+      "edu.af": "https://rdap.coccaregistry.org/",
+      "net.af": "https://rdap.coccaregistry.org/",
+      "org.af": "https://rdap.coccaregistry.org/"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="tlds.txt">
+    **Downloaded from:** `https://data.iana.org/TLD/tlds-alpha-by-domain.txt`
+    
+    **Purpose:** IANA's official TLD list for auto-detecting TLD queries
+    
+    **Contains:** Plain text list of all valid TLDs:
+    ```
+    # Version 2024030400, Last Updated Mon Mar  4 07:07:01 2024 UTC
+    AAA
+    AARP
+    ABARTH
+    ...
+    GOOGLE
+    ...
+    ```
+  </Tab>
+</Tabs>
+
+### Update Output Example
+
+```bash
+$ rdap --update
+```
+
+```
+→ Updating configuration files...
+  Source: https://github.com/xtomcom/rdap
+
+✓ config.json updated
+✓ tlds.json updated
+✓ tlds.txt updated (IANA TLD list)
+
+Config directory: /home/user/.config/rdap
+
+Note:
+  - Your custom settings in *.local.json files are preserved
+  - Create config.local.json or tlds.local.json for local overrides
+```
+
+<Warning>
+The update command modifies `~/.config/rdap/config.json` and `~/.config/rdap/tlds.json`. Your `*.local.json` files are never touched.
+</Warning>
+
+## Local Overrides
+
+Create local override files that survive updates.
+
+### config.local.json
+
+Override bootstrap URLs or cache settings:
+
+```bash
+mkdir -p ~/.config/rdap
+cat > ~/.config/rdap/config.local.json << 'EOF'
+{
+  "bootstrap": {
+    "dns": "https://custom-bootstrap.example.com/dns.json",
+    "asn": "https://data.iana.org/rdap/asn.json",
+    "ipv4": "https://data.iana.org/rdap/ipv4.json",
+    "ipv6": "https://data.iana.org/rdap/ipv6.json"
+  },
+  "cache": {
+    "ttl_seconds": 3600
+  }
+}
+EOF
+```
+
+<Note>
+`config.local.json` **replaces** the base config entirely. Make sure to include all required fields.
+</Note>
+
+### tlds.local.json
+
+Add custom TLD-to-server mappings:
+
+```bash
+mkdir -p ~/.config/rdap
+cat > ~/.config/rdap/tlds.local.json << 'EOF'
+{
+  "example": "https://rdap.example.com/",
+  "test": "https://rdap.test.local/",
+  "co.example": "https://rdap.co.example.com/"
+}
+EOF
+```
+
+<Note>
+`tlds.local.json` is **merged** on top of `tlds.json`. You only need to specify your additions/overrides.
+</Note>
+
+## TLD Overrides
+
+TLD overrides allow you to specify RDAP servers for TLDs not in the IANA bootstrap registry.
+
+### Why TLD Overrides?
+
+Some country-code TLDs (ccTLDs) don't participate in the IANA RDAP bootstrap service. For these, you need to specify the RDAP server directly.
+
+### Built-in Overrides
+
+The tool includes overrides for common ccTLDs:
+
+- `.io` → Identity Digital
+- `.ac` → Nic.ac
+- `.com.af`, `.edu.af`, `.net.af`, `.org.af` → COCCA Registry
+- And many more...
+
+### Lookup Priority
+
+When querying a domain:
+
+<Steps>
+  <Step title="Check TLD Overrides">
+    Look in merged `tlds.json` + `tlds.local.json` for exact match
+  </Step>
+  
+  <Step title="Try Second-Level">
+    For multi-part TLDs, try each suffix (e.g., for `foo.com.af`: try `foo.com.af`, then `com.af`, then `af`)
+  </Step>
+  
+  <Step title="Use IANA Bootstrap">
+    If no override found, query IANA bootstrap service
+  </Step>
+</Steps>
+
+### Custom Override Example
+
+Add an override for a private TLD:
+
+```json
+// ~/.config/rdap/tlds.local.json
+{
+  "internal": "https://rdap.corp.local/",
+  "dev.internal": "https://rdap-dev.corp.local/"
+}
+```
+
+Now you can query:
+
+```bash
+rdap example.internal
+# Uses https://rdap.corp.local/
+
+rdap test.dev.internal
+# Uses https://rdap-dev.corp.local/
+```
+
+## Bootstrap Configuration
+
+The `config.json` file specifies URLs for IANA's bootstrap registries.
+
+### Default Bootstrap URLs
+
+```json
+{
+  "bootstrap": {
+    "dns": "https://data.iana.org/rdap/dns.json",
+    "asn": "https://data.iana.org/rdap/asn.json",
+    "ipv4": "https://data.iana.org/rdap/ipv4.json",
+    "ipv6": "https://data.iana.org/rdap/ipv6.json"
+  }
+}
+```
+
+### How Bootstrap Works
+
+<Steps>
+  <Step title="Query Type Detection">
+    Determine if query is for domain, IP, or AS number
+  </Step>
+  
+  <Step title="Download Bootstrap File">
+    Fetch appropriate bootstrap JSON from IANA (cached locally)
+  </Step>
+  
+  <Step title="Find Authoritative Server">
+    Match query against bootstrap registry to find RDAP server
+  </Step>
+  
+  <Step title="Query RDAP Server">
+    Send RDAP request to authoritative server
+  </Step>
+</Steps>
+
+### Custom Bootstrap Server
+
+Replace IANA bootstrap with your own:
+
+```json
+// ~/.config/rdap/config.local.json
+{
+  "bootstrap": {
+    "dns": "https://bootstrap.corp.local/dns.json",
+    "asn": "https://bootstrap.corp.local/asn.json",
+    "ipv4": "https://bootstrap.corp.local/ipv4.json",
+    "ipv6": "https://bootstrap.corp.local/ipv6.json"
+  }
+}
+```
+
+## Cache Configuration
+
+Bootstrap files are cached locally to improve performance.
+
+### Cache Settings
+
+```json
+{
+  "cache": {
+    "ttl_seconds": 86400
+  }
+}
+```
+
+<ParamField path="ttl_seconds" type="integer" default="86400">
+  Cache time-to-live in seconds (default: 24 hours)
+</ParamField>
+
+### Cache Location
+
+Bootstrap files are cached in:
+
+```
+~/.cache/rdap/
+├── dns.json
+├── asn.json
+├── ipv4.json
+└── ipv6.json
+```
+
+### Clear Cache
+
+To force fresh bootstrap downloads:
+
+```bash
+rm -rf ~/.cache/rdap/
+```
+
+## Configuration Directories
+
+### User Config Directory
+
+```
+~/.config/rdap/
+├── config.json          # Downloaded via --update
+├── config.local.json    # Your custom overrides
+├── tlds.json           # Downloaded via --update
+├── tlds.local.json     # Your custom TLD mappings
+└── tlds.txt            # IANA TLD list (downloaded via --update)
+```
+
+### System Config Directory
+
+```
+/etc/rdap/
+├── config.json
+├── tlds.json
+└── tlds.txt
+```
+
+<Note>
+System config requires root/admin privileges to modify and is typically used for system-wide deployments.
+</Note>
+
+## Environment Variables
+
+<ParamField path="HOME" type="string">
+  Used to locate user config directory (`$HOME/.config/rdap/`)
+</ParamField>
+
+## Configuration Examples
+
+### Corporate Environment
+
+```json
+// ~/.config/rdap/config.local.json
+{
+  "bootstrap": {
+    "dns": "https://bootstrap.corp.local/dns.json",
+    "asn": "https://data.iana.org/rdap/asn.json",
+    "ipv4": "https://data.iana.org/rdap/ipv4.json",
+    "ipv6": "https://data.iana.org/rdap/ipv6.json"
+  },
+  "cache": {
+    "ttl_seconds": 3600
+  }
+}
+```
+
+```json
+// ~/.config/rdap/tlds.local.json
+{
+  "corp": "https://rdap.corp.local/",
+  "internal": "https://rdap.corp.local/"
+}
+```
+
+### Development Setup
+
+```json
+// ~/.config/rdap/tlds.local.json
+{
+  "test": "https://rdap-test.local:8443/",
+  "dev": "https://rdap-dev.local:8443/",
+  "localhost": "https://localhost:8443/"
+}
+```
+
+### Multi-Region Setup
+
+```json
+// ~/.config/rdap/config.local.json
+{
+  "bootstrap": {
+    "dns": "https://rdap-bootstrap-us.example.com/dns.json",
+    "asn": "https://rdap-bootstrap-us.example.com/asn.json",
+    "ipv4": "https://rdap-bootstrap-us.example.com/ipv4.json",
+    "ipv6": "https://rdap-bootstrap-us.example.com/ipv6.json"
+  },
+  "cache": {
+    "ttl_seconds": 7200
+  }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Local Overrides" icon="shield">
+    Always put your customizations in `*.local.json` files so they're preserved during updates
+  </Card>
+  
+  <Card title="Regular Updates" icon="arrows-rotate">
+    Run `rdap --update` periodically to get the latest TLD overrides and bootstrap URLs
+  </Card>
+  
+  <Card title="Version Control" icon="code-branch">
+    Consider tracking your `*.local.json` files in version control for team sharing
+  </Card>
+  
+  <Card title="Cache Management" icon="database">
+    Clear cache if you see stale bootstrap data or connection issues
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Config Not Loading
+
+Check config file syntax:
+
+```bash
+jq . ~/.config/rdap/config.local.json
+```
+
+### Override Not Working
+
+Verify priority order - higher priority configs override lower:
+
+```bash
+ls -la ~/.config/rdap/
+ls -la /etc/rdap/
+```
+
+### Update Fails
+
+Check network connectivity and GitHub access:
+
+```bash
+curl -I https://raw.githubusercontent.com/xtomcom/rdap/main/config/config.json
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Queries" icon="magnifying-glass" href="/cli/basic-queries">
+    Start querying with your configured settings
+  </Card>
+  <Card title="Advanced Options" icon="sliders" href="/cli/advanced-options">
+    Combine config with CLI options
+  </Card>
+</CardGroup>

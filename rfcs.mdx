@@ -1,0 +1,408 @@
+---
+title: RFC References
+description: RDAP protocol specifications and related standards implemented by this client
+---
+
+## RDAP Core Specifications
+
+The RDAP (Registration Data Access Protocol) is defined by a series of IETF RFCs that replace the legacy WHOIS protocol with a modern, structured, and RESTful alternative.
+
+### RFC 7480 - HTTP Usage in RDAP
+
+**Link:** [https://tools.ietf.org/html/rfc7480](https://tools.ietf.org/html/rfc7480)
+
+**Status:** Standards Track (March 2015)
+
+**Purpose:** Defines how HTTP is used as the transport protocol for RDAP.
+
+<Accordion title="Key Requirements">
+- **Content Type**: Responses MUST use `application/rdap+json` or `application/json`
+- **HTTP Methods**: RDAP uses GET for queries (read-only protocol)
+- **Status Codes**: Standard HTTP status codes (200 OK, 404 Not Found, 400 Bad Request, etc.)
+- **HTTPS**: RDAP servers SHOULD use HTTPS for security
+- **Redirects**: Clients MUST follow HTTP redirects (301, 302, 307, 308)
+- **User-Agent**: Clients SHOULD identify themselves
+
+**Implementation in this client:**
+```rust
+// src/client.rs
+let response = self.http_client
+    .get(url.as_str())
+    .header("Accept", "application/rdap+json, application/json")
+    .send()
+    .await?;
+```
+</Accordion>
+
+### RFC 7482 - RDAP Query Format
+
+**Link:** [https://tools.ietf.org/html/rfc7482](https://tools.ietf.org/html/rfc7482)
+
+**Status:** Standards Track (March 2015)
+
+**Purpose:** Specifies the query path segments and URL structure for RDAP requests.
+
+<Accordion title="Query Types and Paths">
+**Supported query types:**
+
+| Resource Type | Path Segment | Example |
+|--------------|--------------|----------|
+| Domain | `/domain/{domain}` | `/domain/example.com` |
+| IPv4 Address | `/ip/{address}` | `/ip/192.0.2.1` |
+| IPv6 Address | `/ip/{address}` | `/ip/2001:db8::1` |
+| IPv4 Network | `/ip/{cidr}` | `/ip/192.0.2.0/24` |
+| IPv6 Network | `/ip/{cidr}` | `/ip/2001:db8::/32` |
+| AS Number | `/autnum/{number}` | `/autnum/15169` |
+| Entity | `/entity/{handle}` | `/entity/ABC123` |
+| Nameserver | `/nameserver/{name}` | `/nameserver/ns1.example.com` |
+
+**Search queries:**
+- `/domains?name=example*` - Domain search
+- `/entities?fn=John*` - Entity search by name
+- `/nameservers?name=ns*.example.com` - Nameserver search
+
+**Implementation:**
+```rust
+// src/request.rs
+pub fn build_url(&self, base: &Url) -> Result<Url> {
+    let path = match self.query_type {
+        QueryType::Domain | QueryType::Tld => format!("domain/{}", self.query),
+        QueryType::Ip => format!("ip/{}", self.query),
+        QueryType::Autnum => {
+            let num = self.query.strip_prefix("AS")
+                .or_else(|| self.query.strip_prefix("as"))
+                .unwrap_or(&self.query);
+            format!("autnum/{}", num)
+        },
+        // ...
+    };
+    base.join(&path).map_err(Into::into)
+}
+```
+</Accordion>
+
+### RFC 7483 - JSON Responses for RDAP
+
+**Link:** [https://tools.ietf.org/html/rfc7483](https://tools.ietf.org/html/rfc7483)
+
+**Status:** Standards Track (March 2015)
+
+**Purpose:** Defines the JSON data structures for RDAP responses.
+
+<Accordion title="Response Object Types">
+**Core object classes:**
+
+1. **Domain Object** - Represents a DNS domain name registration
+   - `objectClassName`: "domain"
+   - Fields: `ldhName`, `unicodeName`, `status`, `nameservers`, `secureDNS`, `entities`, `events`
+
+2. **Entity Object** - Represents a person, organization, or role
+   - `objectClassName`: "entity"
+   - Fields: `handle`, `vcardArray`, `roles`, `publicIds`, `entities`
+
+3. **Nameserver Object** - DNS nameserver information
+   - `objectClassName`: "nameserver"
+   - Fields: `ldhName`, `unicodeName`, `ipAddresses`
+
+4. **Autnum Object** - Autonomous System Number
+   - `objectClassName`: "autnum"
+   - Fields: `startAutnum`, `endAutnum`, `name`, `type`, `status`, `country`
+
+5. **IP Network Object** - IP address range
+   - `objectClassName`: "ip network"
+   - Fields: `startAddress`, `endAddress`, `ipVersion`, `name`, `type`, `country`, `parentHandle`
+
+**Common structures:**
+- `status` - Array of status values (active, locked, transfer prohibited, etc.)
+- `events` - Array of event objects (registration, expiration, last changed)
+- `links` - Array of related resources and alternate representations
+- `notices` - Array of informational messages
+- `remarks` - Array of additional comments
+
+**Implementation:**
+```rust
+// src/models/domain.rs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Domain {
+    #[serde(rename = "objectClassName")]
+    pub object_class_name: Option<String>,
+    
+    #[serde(rename = "ldhName")]
+    pub ldh_name: Option<String>,
+    
+    pub status: Vec<String>,
+    pub nameservers: Vec<Nameserver>,
+    
+    #[serde(rename = "secureDNS")]
+    pub secure_dns: Option<SecureDns>,
+    
+    pub entities: Vec<Entity>,
+    pub events: Vec<Event>,
+    pub links: Vec<Link>,
+    // ...
+}
+```
+</Accordion>
+
+### RFC 7484 - Finding the Authoritative RDAP Service
+
+**Link:** [https://tools.ietf.org/html/rfc7484](https://tools.ietf.org/html/rfc7484)
+
+**Status:** Standards Track (March 2015)
+
+**Purpose:** Describes bootstrap mechanisms for discovering authoritative RDAP servers.
+
+<Accordion title="Bootstrap Service Discovery">
+**IANA Bootstrap Registries:**
+
+IANA maintains JSON files mapping resource ranges to RDAP servers:
+
+1. **DNS Bootstrap** (`dns.json`)
+   - Maps TLDs to RDAP servers
+   - Example: `.com` → `https://rdap.verisign.com/com/v1/`
+
+2. **AS Number Bootstrap** (`asn.json`)
+   - Maps AS number ranges to RIR RDAP servers
+   - Example: `AS15169` → `https://rdap.arin.net/registry`
+
+3. **IPv4 Bootstrap** (`ipv4.json`)
+   - Maps IPv4 CIDR ranges to RIR RDAP servers
+   - Example: `8.0.0.0/8` → `https://rdap.arin.net/registry`
+
+4. **IPv6 Bootstrap** (`ipv6.json`)
+   - Maps IPv6 CIDR ranges to RIR RDAP servers
+   - Example: `2001:db8::/32` → `https://rdap.arin.net/registry`
+
+**Bootstrap file format:**
+```json
+{
+  "version": "1.0",
+  "publication": "2024-01-15T10:00:00Z",
+  "services": [
+    [
+      ["com", "net"],
+      ["https://rdap.verisign.com/com/v1/", "https://rdap.verisign.com/net/v1/"]
+    ],
+    [
+      ["org"],
+      ["https://rdap.publicinterestregistry.org/rdap/"]
+    ]
+  ]
+}
+```
+
+**Implementation:**
+```rust
+// src/bootstrap.rs
+pub async fn lookup(&self, request: &RdapRequest) -> Result<Vec<Url>> {
+    match request.query_type {
+        QueryType::Domain => {
+            // Check TLD overrides first
+            if let Some(url) = lookup_tld_override(&self.tld_overrides, &request.query) {
+                return Ok(vec![url]);
+            }
+            // Fetch DNS bootstrap
+            let registry = self.fetch_registry(&self.config.bootstrap.dns).await?;
+            Ok(self.match_domain(&registry, &request.query))
+        }
+        QueryType::Ip => {
+            let bootstrap_url = if request.query.contains(':') {
+                &self.config.bootstrap.ipv6
+            } else {
+                &self.config.bootstrap.ipv4
+            };
+            let registry = self.fetch_registry(bootstrap_url).await?;
+            self.match_ip(&registry, &request.query)
+        }
+        // ...
+    }
+}
+```
+</Accordion>
+
+<Note>
+**TLD Override Extension**
+
+This client extends RFC 7484 by supporting a local `tlds.json` file for ccTLDs and other TLDs not in IANA bootstrap. This is checked before IANA bootstrap for faster lookups and support for emerging TLDs.
+</Note>
+
+## Contact Data Standards
+
+### RFC 6350 - vCard Format Specification
+
+**Link:** [https://tools.ietf.org/html/rfc6350](https://tools.ietf.org/html/rfc6350)
+
+**Status:** Standards Track (August 2011)
+
+**Purpose:** Defines the vCard format for representing contact information.
+
+<Accordion title="vCard in RDAP">
+RDAP uses vCard 4.0 for entity contact data. Contact information is embedded in JSON as a `vcardArray`.
+
+**vCard properties used in RDAP:**
+- `fn` - Formatted name (full name)
+- `n` - Name components (surname, given name, etc.)
+- `org` - Organization
+- `adr` - Address (street, locality, region, postal code, country)
+- `tel` - Telephone number
+- `email` - Email address
+- `title` - Job title
+- `role` - Role or occupation
+- `lang` - Language preference
+
+**Example vCard in RDAP:**
+```json
+{
+  "vcardArray": [
+    "vcard",
+    [
+      ["version", {}, "text", "4.0"],
+      ["fn", {}, "text", "John Doe"],
+      ["org", {}, "text", "Example Corp"],
+      ["email", {}, "text", "john@example.com"],
+      ["tel", {"type": "voice"}, "uri", "tel:+1-555-0100"],
+      ["adr", {},
+        "text",
+        ["", "", "123 Main St", "Anytown", "CA", "12345", "US"]
+      ]
+    ]
+  ]
+}
+```
+
+**Implementation:**
+```rust
+// src/models/vcard.rs
+pub struct VCard {
+    properties: Vec<VCardProperty>,
+}
+
+impl VCard {
+    pub fn name(&self) -> Option<String> {
+        self.get_text("fn")
+    }
+    
+    pub fn email(&self) -> Option<String> {
+        self.get_text("email")
+    }
+    
+    pub fn organization(&self) -> Option<String> {
+        self.get_text("org")
+    }
+}
+```
+</Accordion>
+
+### RFC 7095 - jCard: JSON Representation of vCard
+
+**Link:** [https://tools.ietf.org/html/rfc7095](https://tools.ietf.org/html/rfc7095)
+
+**Status:** Standards Track (January 2014)
+
+**Purpose:** Defines JSON format for vCard data (jCard), which RDAP uses for contact information.
+
+<Accordion title="jCard Structure">
+jCard represents vCard properties as JSON arrays:
+
+```
+[propertyName, parameters, valueType, propertyValue]
+```
+
+**Examples:**
+```json
+// Simple text property
+["fn", {}, "text", "John Doe"]
+
+// Property with parameters
+["tel", {"type": ["work", "voice"]}, "uri", "tel:+1-555-0100"]
+
+// Multi-valued property
+["adr", {"type": "work"}, "text",
+  ["", "", "123 Main St", "Anytown", "CA", "12345", "US"]]
+// [post-office-box, extended-address, street, locality, region, postal-code, country]
+```
+
+**Complete jCard object:**
+```json
+[
+  "vcard",
+  [
+    ["version", {}, "text", "4.0"],
+    ["fn", {}, "text", "Jane Doe"],
+    ["n", {}, "text", ["Doe", "Jane", "", "", ""]],
+    ["email", {}, "text", "jane@example.com"],
+    ["org", {}, "text", "Example Inc."]
+  ]
+]
+```
+
+The client parses jCard arrays and provides convenient accessor methods for common properties.
+</Accordion>
+
+## Related Standards
+
+### DNSSEC in RDAP
+
+**Related RFC:** [RFC 4034](https://tools.ietf.org/html/rfc4034) - Resource Records for DNS Security Extensions
+
+RDAP domain objects include `secureDNS` field for DNSSEC information:
+
+```json
+{
+  "secureDNS": {
+    "delegationSigned": true,
+    "dsData": [
+      {
+        "keyTag": 6125,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "80F8B78D23107153578BAD3800E9543500474E5C30C29698B40A3DB23ED9DA9F"
+      }
+    ]
+  }
+}
+```
+
+### Status Values
+
+**Related:** EPP Status Codes (derived from [RFC 5731](https://tools.ietf.org/html/rfc5731))
+
+Common RDAP status values:
+- `active` - Object is active
+- `inactive` - Object is not active
+- `locked` - Changes prohibited
+- `pending create` - Create operation pending
+- `pending delete` - Delete operation pending
+- `pending transfer` - Transfer operation pending
+- `client delete prohibited` - Client-set delete protection
+- `client transfer prohibited` - Client-set transfer protection
+- `client update prohibited` - Client-set update protection
+- `server delete prohibited` - Server-set delete protection
+- `server transfer prohibited` - Server-set transfer protection
+- `server update prohibited` - Server-set update protection
+
+## Compliance Summary
+
+<Note>
+**RFC Compliance**
+
+This RDAP client implements:
+- ✅ RFC 7480 - HTTP transport with proper headers and status handling
+- ✅ RFC 7482 - All query path formats (domain, IP, AS, entity, nameserver)
+- ✅ RFC 7483 - Complete JSON response parsing for all object types
+- ✅ RFC 7484 - Bootstrap service discovery with caching
+- ✅ RFC 6350 - vCard 4.0 contact data
+- ✅ RFC 7095 - jCard JSON representation
+
+**Extensions:**
+- TLD override system for ccTLDs
+- Multi-layer queries (registry + registrar)
+- IPv6 CIDR retry logic
+- Shorthand IP normalization
+</Note>
+
+## Additional Resources
+
+- **IANA RDAP Bootstrap Service**: [https://data.iana.org/rdap/](https://data.iana.org/rdap/)
+- **RDAP Working Group**: [https://datatracker.ietf.org/wg/weirds/](https://datatracker.ietf.org/wg/weirds/)
+- **RDAP Pilot Program**: [https://www.icann.org/rdap](https://www.icann.org/rdap)

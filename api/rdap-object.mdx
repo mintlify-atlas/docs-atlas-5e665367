@@ -1,0 +1,698 @@
+---
+title: RdapObject
+description: Enumeration of all RDAP response object types
+---
+
+## Overview
+
+The `RdapObject` enum represents all possible RDAP response types. It is returned by query methods and contains the parsed RDAP data.
+
+## Definition
+
+```rust
+pub enum RdapObject {
+    Domain(Domain),
+    Entity(Entity),
+    Nameserver(Nameserver),
+    Autnum(Autnum),
+    IpNetwork(IpNetwork),
+    Error(ErrorResponse),
+    DomainSearch(DomainSearchResults),
+    EntitySearch(EntitySearchResults),
+    NameserverSearch(NameserverSearchResults),
+    Help(HelpResponse),
+}
+```
+
+## Object Types
+
+### Domain
+
+Domain name registration information.
+
+**Returned By:** Domain and TLD queries
+
+**Structure:**
+
+<ResponseField name="object_class_name" type="String">
+  Always "domain" for domain objects
+</ResponseField>
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance levels (e.g., ["rdap_level_0"])
+</ResponseField>
+
+<ResponseField name="ldh_name" type="Option<String>">
+  Letters-Digits-Hyphen (ASCII) domain name
+</ResponseField>
+
+<ResponseField name="unicode_name" type="Option<String>">
+  Unicode (IDN) domain name if different from ldh_name
+</ResponseField>
+
+<ResponseField name="handle" type="Option<String>">
+  Registry-unique identifier for the domain
+</ResponseField>
+
+<ResponseField name="nameservers" type="Vec<Nameserver>">
+  Authoritative nameservers for this domain
+</ResponseField>
+
+<ResponseField name="secure_dns" type="Option<SecureDNS>">
+  DNSSEC information including DS records and DNSKEY data
+</ResponseField>
+
+<ResponseField name="entities" type="Vec<Entity>">
+  Associated entities (registrant, admin, tech, registrar, etc.)
+</ResponseField>
+
+<ResponseField name="status" type="Status">
+  Domain status codes (e.g., clientTransferProhibited, active)
+</ResponseField>
+
+<ResponseField name="events" type="Vec<Event>">
+  Lifecycle events (registration, expiration, last updated, etc.)
+</ResponseField>
+
+<ResponseField name="links" type="Vec<Link>">
+  Related links including registrar referrals
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices from the server
+</ResponseField>
+
+<ResponseField name="remarks" type="Vec<Remark>">
+  Additional remarks about the domain
+</ResponseField>
+
+<ResponseField name="public_ids" type="Vec<PublicId>">
+  Public identifiers
+</ResponseField>
+
+<ResponseField name="port43" type="Option<String>">
+  Legacy WHOIS server hostname
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for the response
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "example.com");
+let result = client.query(&request).await?;
+
+if let RdapObject::Domain(domain) = result {
+    println!("Domain: {:?}", domain.ldh_name);
+    println!("Status: {:?}", domain.status);
+    
+    for event in &domain.events {
+        println!("Event: {} at {:?}", event.event_action, event.event_date);
+    }
+    
+    for ns in &domain.nameservers {
+        println!("Nameserver: {:?}", ns.ldh_name);
+    }
+    
+    for entity in &domain.entities {
+        println!("Entity: {:?} ({:?})", entity.handle, entity.roles);
+    }
+}
+```
+
+### Entity
+
+Entity (organization, person, contact) information.
+
+**Returned By:** Entity queries, nested in Domain/IP/AS responses
+
+**Structure:**
+
+<ResponseField name="object_class_name" type="String">
+  Always "entity" for entity objects
+</ResponseField>
+
+<ResponseField name="handle" type="Option<String>">
+  Registry-unique identifier for the entity
+</ResponseField>
+
+<ResponseField name="vcard_array" type="Option<VCard>">
+  Contact information in jCard/vCard format
+</ResponseField>
+
+<ResponseField name="roles" type="Vec<String>">
+  Entity roles (registrant, administrative, technical, registrar, abuse, etc.)
+</ResponseField>
+
+<ResponseField name="public_ids" type="Vec<PublicId>">
+  Public identifiers
+</ResponseField>
+
+<ResponseField name="entities" type="Vec<Entity>">
+  Nested entities
+</ResponseField>
+
+<ResponseField name="status" type="Status">
+  Entity status codes
+</ResponseField>
+
+<ResponseField name="events" type="Vec<Event>">
+  Lifecycle events
+</ResponseField>
+
+<ResponseField name="links" type="Vec<Link>">
+  Related links
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices
+</ResponseField>
+
+<ResponseField name="remarks" type="Vec<Remark>">
+  Additional remarks
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Entity, "ENTITY-123");
+let result = client.query(&request).await?;
+
+if let RdapObject::Entity(entity) = result {
+    println!("Handle: {:?}", entity.handle);
+    println!("Roles: {:?}", entity.roles);
+    
+    if let Some(vcard) = &entity.vcard_array {
+        // Parse vCard data for contact info
+    }
+}
+```
+
+### Nameserver
+
+Nameserver information.
+
+**Returned By:** Nameserver queries, nested in Domain responses
+
+**Structure:**
+
+<ResponseField name="object_class_name" type="String">
+  Always "nameserver" for nameserver objects
+</ResponseField>
+
+<ResponseField name="ldh_name" type="Option<String>">
+  ASCII hostname of the nameserver
+</ResponseField>
+
+<ResponseField name="unicode_name" type="Option<String>">
+  Unicode hostname if different from ldh_name
+</ResponseField>
+
+<ResponseField name="handle" type="Option<String>">
+  Registry-unique identifier
+</ResponseField>
+
+<ResponseField name="ip_addresses" type="Option<IpAddresses>">
+  IPv4 and IPv6 addresses of the nameserver
+</ResponseField>
+
+<ResponseField name="entities" type="Vec<Entity>">
+  Associated entities
+</ResponseField>
+
+<ResponseField name="status" type="Status">
+  Nameserver status codes
+</ResponseField>
+
+<ResponseField name="events" type="Vec<Event>">
+  Lifecycle events
+</ResponseField>
+
+<ResponseField name="links" type="Vec<Link>">
+  Related links
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Nameserver, "ns1.example.com");
+let result = client.query(&request).await?;
+
+if let RdapObject::Nameserver(ns) = result {
+    println!("Nameserver: {:?}", ns.ldh_name);
+    
+    if let Some(ips) = &ns.ip_addresses {
+        println!("IPv4: {:?}", ips.v4);
+        println!("IPv6: {:?}", ips.v6);
+    }
+}
+```
+
+### Autnum
+
+Autonomous System Number information.
+
+**Returned By:** AS number queries
+
+**Structure:**
+
+<ResponseField name="object_class_name" type="String">
+  Always "autnum" for AS number objects
+</ResponseField>
+
+<ResponseField name="handle" type="Option<String>">
+  Registry-unique identifier
+</ResponseField>
+
+<ResponseField name="start_autnum" type="Option<u32>">
+  Start of AS number range
+</ResponseField>
+
+<ResponseField name="end_autnum" type="Option<u32>">
+  End of AS number range (same as start for single AS)
+</ResponseField>
+
+<ResponseField name="name" type="Option<String>">
+  AS name/description
+</ResponseField>
+
+<ResponseField name="type_" type="Option<String>">
+  AS type (e.g., "DIRECT ALLOCATION", "DIRECT ASSIGNMENT")
+</ResponseField>
+
+<ResponseField name="country" type="Option<String>">
+  Country code (ISO 3166-1 alpha-2)
+</ResponseField>
+
+<ResponseField name="entities" type="Vec<Entity>">
+  Associated entities (registrant, abuse contact, etc.)
+</ResponseField>
+
+<ResponseField name="status" type="Status">
+  AS status codes
+</ResponseField>
+
+<ResponseField name="events" type="Vec<Event>">
+  Lifecycle events
+</ResponseField>
+
+<ResponseField name="links" type="Vec<Link>">
+  Related links
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+let result = client.query(&request).await?;
+
+if let RdapObject::Autnum(autnum) = result {
+    println!("AS: {} - {}", autnum.start_autnum?, autnum.end_autnum?);
+    println!("Name: {:?}", autnum.name);
+    println!("Country: {:?}", autnum.country);
+    
+    for entity in &autnum.entities {
+        if entity.roles.contains(&"abuse".to_string()) {
+            println!("Abuse contact: {:?}", entity.handle);
+        }
+    }
+}
+```
+
+### IpNetwork
+
+IP address or network registration information.
+
+**Returned By:** IP address queries
+
+**Structure:**
+
+<ResponseField name="object_class_name" type="String">
+  Always "ip network" for IP network objects
+</ResponseField>
+
+<ResponseField name="handle" type="Option<String>">
+  Registry-unique identifier
+</ResponseField>
+
+<ResponseField name="start_address" type="Option<String>">
+  Start IP address of the range
+</ResponseField>
+
+<ResponseField name="end_address" type="Option<String>">
+  End IP address of the range
+</ResponseField>
+
+<ResponseField name="ip_version" type="Option<String>">
+  IP version ("v4" or "v6")
+</ResponseField>
+
+<ResponseField name="name" type="Option<String>">
+  Network name
+</ResponseField>
+
+<ResponseField name="type_" type="Option<String>">
+  Network type (e.g., "DIRECT ALLOCATION", "ASSIGNED PA")
+</ResponseField>
+
+<ResponseField name="country" type="Option<String>">
+  Country code (ISO 3166-1 alpha-2)
+</ResponseField>
+
+<ResponseField name="parent_handle" type="Option<String>">
+  Handle of parent network (for suballocations)
+</ResponseField>
+
+<ResponseField name="entities" type="Vec<Entity>">
+  Associated entities (registrant, abuse contact, etc.)
+</ResponseField>
+
+<ResponseField name="status" type="Status">
+  Network status codes
+</ResponseField>
+
+<ResponseField name="events" type="Vec<Event>">
+  Lifecycle events
+</ResponseField>
+
+<ResponseField name="links" type="Vec<Link>">
+  Related links
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Ip, "8.8.8.8");
+let result = client.query(&request).await?;
+
+if let RdapObject::IpNetwork(network) = result {
+    println!("Network: {} - {}", 
+        network.start_address.unwrap_or_default(),
+        network.end_address.unwrap_or_default()
+    );
+    println!("Version: {:?}", network.ip_version);
+    println!("Name: {:?}", network.name);
+    println!("Country: {:?}", network.country);
+    
+    for entity in &network.entities {
+        if entity.roles.contains(&"abuse".to_string()) {
+            println!("Abuse contact found");
+        }
+    }
+}
+```
+
+### Error
+
+Error response from RDAP server.
+
+**Returned By:** Server errors (non-404 HTTP errors)
+
+**Structure:**
+
+<ResponseField name="error_code" type="Option<u16>">
+  HTTP error code
+</ResponseField>
+
+<ResponseField name="title" type="Option<String>">
+  Error title/summary
+</ResponseField>
+
+<ResponseField name="description" type="Option<Vec<String>>">
+  Detailed error description lines
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for the error message
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Domain, "invalid");
+
+match client.query(&request).await {
+    Ok(RdapObject::Error(error)) => {
+        println!("Error {}: {:?}", 
+            error.error_code.unwrap_or(0),
+            error.title
+        );
+        if let Some(desc) = error.description {
+            for line in desc {
+                println!("  {}", line);
+            }
+        }
+    }
+    Err(e) => println!("Error: {}", e),
+    _ => {}
+}
+```
+
+### DomainSearch
+
+Domain search results.
+
+**Returned By:** Domain search queries
+
+**Structure:**
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance levels
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices
+</ResponseField>
+
+<ResponseField name="domains" type="Vec<Domain>">
+  Array of matching domain objects
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for the response
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::DomainSearch, "example*")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+
+if let RdapObject::DomainSearch(search) = result {
+    println!("Found {} domains", search.domains.len());
+    
+    for domain in search.domains {
+        println!("  - {:?}", domain.ldh_name);
+    }
+}
+```
+
+### EntitySearch
+
+Entity search results.
+
+**Returned By:** Entity search queries
+
+**Structure:**
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance levels
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices
+</ResponseField>
+
+<ResponseField name="entities" type="Vec<Entity>">
+  Array of matching entity objects
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for the response
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::EntitySearch, "Example*")
+    .with_server(Url::parse("https://rdap.arin.net/registry/")?);
+let result = client.query(&request).await?;
+
+if let RdapObject::EntitySearch(search) = result {
+    println!("Found {} entities", search.entities.len());
+    
+    for entity in search.entities {
+        println!("  - {:?} ({:?})", entity.handle, entity.roles);
+    }
+}
+```
+
+### NameserverSearch
+
+Nameserver search results.
+
+**Returned By:** Nameserver search queries
+
+**Structure:**
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance levels
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Informational notices
+</ResponseField>
+
+<ResponseField name="nameservers" type="Vec<Nameserver>">
+  Array of matching nameserver objects
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for the response
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::NameserverSearch, "ns*.example.com")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+
+if let RdapObject::NameserverSearch(search) = result {
+    println!("Found {} nameservers", search.nameservers.len());
+    
+    for ns in search.nameservers {
+        println!("  - {:?}", ns.ldh_name);
+    }
+}
+```
+
+### Help
+
+RDAP server help response.
+
+**Returned By:** Help queries
+
+**Structure:**
+
+<ResponseField name="conformance" type="Vec<String>">
+  RDAP conformance levels supported by the server
+</ResponseField>
+
+<ResponseField name="notices" type="Vec<Notice>">
+  Help information and notices from the server
+</ResponseField>
+
+<ResponseField name="lang" type="Option<String>">
+  Language tag for the response
+</ResponseField>
+
+**Example:**
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+use url::Url;
+
+let client = RdapClient::new()?;
+let request = RdapRequest::new(QueryType::Help, "")
+    .with_server(Url::parse("https://rdap.verisign.com/com/v1/")?);
+let result = client.query(&request).await?;
+
+if let RdapObject::Help(help) = result {
+    println!("Conformance: {:?}", help.conformance);
+    
+    for notice in help.notices {
+        if let Some(title) = notice.title {
+            println!("Notice: {}", title);
+        }
+        for desc in notice.description {
+            println!("  {}", desc);
+        }
+    }
+}
+```
+
+## Pattern Matching
+
+Use Rust's pattern matching to handle different response types:
+
+```rust
+use rdap::{RdapClient, RdapRequest, RdapObject};
+
+let client = RdapClient::new()?;
+let query_type = RdapRequest::detect_type("example.com")?;
+let request = RdapRequest::new(query_type, "example.com");
+let result = client.query(&request).await?;
+
+match result {
+    RdapObject::Domain(domain) => {
+        println!("Domain: {:?}", domain.ldh_name);
+    }
+    RdapObject::IpNetwork(network) => {
+        println!("IP Network: {} - {}",
+            network.start_address.unwrap_or_default(),
+            network.end_address.unwrap_or_default()
+        );
+    }
+    RdapObject::Autnum(autnum) => {
+        println!("AS{}: {:?}", 
+            autnum.start_autnum.unwrap_or(0),
+            autnum.name
+        );
+    }
+    RdapObject::Entity(entity) => {
+        println!("Entity: {:?}", entity.handle);
+    }
+    RdapObject::Nameserver(ns) => {
+        println!("Nameserver: {:?}", ns.ldh_name);
+    }
+    RdapObject::Error(error) => {
+        println!("Error: {:?}", error.title);
+    }
+    RdapObject::DomainSearch(search) => {
+        println!("Found {} domains", search.domains.len());
+    }
+    RdapObject::EntitySearch(search) => {
+        println!("Found {} entities", search.entities.len());
+    }
+    RdapObject::NameserverSearch(search) => {
+        println!("Found {} nameservers", search.nameservers.len());
+    }
+    RdapObject::Help(help) => {
+        println!("Help: {:?}", help.conformance);
+    }
+}
+```

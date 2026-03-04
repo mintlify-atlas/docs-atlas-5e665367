@@ -1,0 +1,282 @@
+---
+title: Bootstrap API
+description: RDAP bootstrap service discovery for finding authoritative servers
+---
+
+## Overview
+
+The bootstrap system discovers authoritative RDAP servers for queries using IANA bootstrap registries. It implements RFC 7484 (Finding the Authoritative RDAP Service) with support for TLD overrides.
+
+## BootstrapClient
+
+Client for RDAP service discovery.
+
+```rust
+pub struct BootstrapClient
+```
+
+The `BootstrapClient` orchestrates the discovery of RDAP servers by:
+1. Checking TLD overrides first (for domains)
+2. Fetching IANA bootstrap registries
+3. Matching queries against registry entries
+4. Returning authoritative RDAP server URLs
+
+### new()
+
+Creates a new bootstrap client.
+
+```rust
+pub fn new() -> Result<BootstrapClient>
+```
+
+Initializes the client with:
+- HTTP client for fetching bootstrap registries
+- Loaded configuration (bootstrap URLs, cache settings)
+- TLD overrides for domain queries
+
+**Returns:** Configured `BootstrapClient` instance
+
+### lookup()
+
+Looks up RDAP servers for a request.
+
+```rust
+pub async fn lookup(&self, request: &RdapRequest) -> Result<Vec<Url>>
+```
+
+<ParamField path="request" type="&RdapRequest" required>
+  RDAP request containing query type and query string
+</ParamField>
+
+**Returns:** List of authoritative RDAP server URLs for the query
+
+#### Lookup Strategy by Query Type
+
+**TLD Queries** (`QueryType::Tld`)
+- Always directed to IANA RDAP server: `https://rdap.iana.org/`
+- Used for querying TLD metadata (e.g., `rdap google`)
+
+**Domain Queries** (`QueryType::Domain`)
+1. Check TLD overrides from `tlds.json` first
+2. If override found, return that server URL
+3. Otherwise, fetch IANA DNS bootstrap registry
+4. Match domain against bootstrap entries
+
+**IP Queries** (`QueryType::Ip`)
+1. Determine IPv4 or IPv6 based on query format (`:` indicates IPv6)
+2. Fetch appropriate bootstrap registry (`ipv4.json` or `ipv6.json`)
+3. Normalize IP address (handles shorthand like `1.1` → `1.0.0.1`)
+4. Match IP against CIDR ranges in registry
+
+**ASN Queries** (`QueryType::Autnum`)
+1. Fetch ASN bootstrap registry
+2. Strip "AS" prefix if present (case-insensitive)
+3. Match AS number against ranges in registry
+
+**Entity Queries** (`QueryType::Entity`)
+- Returns error: requires explicit server via `-s/--server` flag
+- No global bootstrap for entity handles
+
+## TLD Override Logic
+
+TLD overrides allow bypassing IANA bootstrap for specific domains. This is essential for:
+- ccTLDs not in IANA bootstrap
+- TLDs with incorrect bootstrap data
+- Custom RDAP server configurations
+
+### Override Priority
+
+For domain queries, TLD overrides are checked **before** IANA bootstrap:
+
+```rust
+if let Some(url) = config::lookup_tld_override(&self.tld_overrides, &request.query) {
+    return Ok(vec![url]);
+}
+// Fall back to IANA bootstrap
+```
+
+### Matching Algorithm
+
+When looking up a domain like `example.com.af`, the system tries matches from most specific to least specific:
+
+1. `example.com.af` (full domain)
+2. `com.af` (second-level domain)
+3. `af` (top-level domain)
+
+First match wins and returns the associated RDAP server URL.
+
+### Example Overrides
+
+```json
+{
+  "io": "https://rdap.identitydigital.services/rdap/",
+  "com.af": "https://rdap.coccaregistry.org/rdap/",
+  "edu.af": "https://rdap.coccaregistry.org/rdap/"
+}
+```
+
+Query `example.io` → matches `"io"` → uses Identity Digital RDAP server
+
+Query `example.com.af` → matches `"com.af"` → uses COCCA Registry RDAP server
+
+## extract_tld()
+
+Extracts the TLD from a domain name.
+
+```rust
+pub fn extract_tld(domain: &str) -> String
+```
+
+<ParamField path="domain" type="&str" required>
+  Domain name (e.g., "example.com")
+</ParamField>
+
+**Returns:** Extracted TLD in lowercase (e.g., "com")
+
+The function:
+1. Removes trailing dots
+2. Converts to lowercase
+3. Splits on `.` and returns the last component
+
+## Bootstrap Registry Format
+
+IANA bootstrap registries use this JSON structure:
+
+```json
+{
+  "version": "1.0",
+  "publication": "2024-01-01T00:00:00Z",
+  "description": "RDAP Bootstrap file for DNS",
+  "services": [
+    [
+      ["com", "net"],
+      ["https://rdap.verisign.com/com/v1/"]
+    ],
+    [
+      ["org"],
+      ["https://rdap.publicinterestregistry.org/"]
+    ]
+  ]
+}
+```
+
+Each service entry contains:
+1. Array of entries (TLDs, IP ranges, or ASN ranges)
+2. Array of RDAP server URLs
+
+### DNS Bootstrap
+
+Maps TLDs to RDAP servers:
+
+```json
+[
+  ["com", "net"],
+  ["https://rdap.verisign.com/com/v1/"]
+]
+```
+
+### IPv4/IPv6 Bootstrap
+
+Maps CIDR ranges to RDAP servers:
+
+```json
+[
+  ["1.0.0.0/8", "1.0.0.0/24"],
+  ["https://rdap.apnic.net/"]
+]
+```
+
+### ASN Bootstrap
+
+Maps AS number ranges to RDAP servers:
+
+```json
+[
+  ["1-1876", "1877-1901"],
+  ["https://rdap.arin.net/registry/"]
+]
+```
+
+## Matching Algorithms
+
+### Domain Matching
+
+```rust
+fn match_domain(&self, registry: &BootstrapRegistry, domain: &str) -> Vec<Url>
+```
+
+Builds a lookup map from registry entries and matches from most specific to least specific:
+
+```
+example.co.uk → try: example.co.uk, co.uk, uk
+```
+
+### IP Matching
+
+```rust
+fn match_ip(&self, registry: &BootstrapRegistry, ip_query: &str) -> Result<Vec<Url>>
+```
+
+Process:
+1. Normalize IP (handles shorthand: `1.1` → `1.0.0.1`)
+2. Extract IP from CIDR if present (`8.8.8.0/24` → `8.8.8.0`)
+3. Parse to `IpAddr`
+4. Check if IP is contained in any CIDR range using `ipnet` crate
+
+### ASN Matching
+
+```rust
+fn match_asn(&self, registry: &BootstrapRegistry, asn_str: &str) -> Result<Vec<Url>>
+```
+
+Process:
+1. Strip "AS" prefix if present (case-insensitive)
+2. Parse to `u32`
+3. Check if ASN falls within any range:
+   - Single ASN: `"1000"` → exact match
+   - Range: `"1000-2000"` → `asn >= 1000 && asn <= 2000`
+
+## Error Handling
+
+The bootstrap client returns errors for:
+
+- **Invalid queries:** Malformed IP addresses or ASNs
+- **Network failures:** Unable to fetch bootstrap registries
+- **HTTP errors:** Non-success status codes from IANA
+- **No match found:** Query doesn't match any bootstrap entry
+- **Unsupported query types:** Entity queries without explicit server
+
+## Example Usage
+
+```rust
+use rdap::bootstrap::BootstrapClient;
+use rdap::request::{RdapRequest, QueryType};
+
+let client = BootstrapClient::new()?;
+
+// Domain query
+let request = RdapRequest {
+    query_type: QueryType::Domain,
+    query: "example.com".to_string(),
+};
+let servers = client.lookup(&request).await?;
+
+// IP query with shorthand
+let request = RdapRequest {
+    query_type: QueryType::Ip,
+    query: "8.8".to_string(),  // Normalized to 8.0.0.8
+};
+let servers = client.lookup(&request).await?;
+
+// ASN query
+let request = RdapRequest {
+    query_type: QueryType::Autnum,
+    query: "AS64496".to_string(),
+};
+let servers = client.lookup(&request).await?;
+```
+
+## Related
+
+- [Configuration API](/api/config) - TLD overrides and bootstrap URLs
+- [Cache API](/api/cache) - Bootstrap file caching

@@ -1,0 +1,309 @@
+---
+title: Basic Queries
+description: Learn how to perform common RDAP queries for domains, IP addresses, and AS numbers
+---
+
+This guide covers the most common RDAP query types: domains, IP addresses, and autonomous system numbers.
+
+## Domain Queries
+
+Query domain registration information:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    let result = client.query(&request).await?;
+
+    if let RdapObject::Domain(domain) = result {
+        if let Some(name) = &domain.ldh_name {
+            println!("Domain: {}", name);
+        }
+        
+        println!("Status: {:?}", domain.status);
+        println!("Nameservers: {}", domain.nameservers.len());
+    }
+
+    Ok(())
+}
+```
+
+**Source reference:** `examples/basic_query.rs`
+
+### Query with Registrar Data
+
+For domains, you can get both registry and registrar information:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Domain, "example.com");
+    
+    // Get both registry and registrar data
+    let query_result = client.query_with_referral(&request).await?;
+    
+    println!("Registry URL: {}", query_result.registry_url);
+    println!("Registry data: {:?}", query_result.registry);
+    
+    if let Some(registrar_data) = query_result.registrar {
+        println!("Registrar URL: {:?}", query_result.registrar_url);
+        println!("Registrar data: {:?}", registrar_data);
+    }
+
+    Ok(())
+}
+```
+
+**Source reference:** `src/client.rs:72`
+
+## IP Address Queries
+
+Query IP network information:
+
+<Tabs>
+  <Tab title="IPv4">
+    ```rust
+    use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+    #[tokio::main]
+    async fn main() -> Result<(), Box<dyn std::error::Error>> {
+        let client = RdapClient::new()?;
+        let request = RdapRequest::new(QueryType::Ip, "8.8.8.8");
+        let result = client.query(&request).await?;
+
+        if let RdapObject::IpNetwork(network) = result {
+            if let Some(name) = &network.name {
+                println!("Network Name: {}", name);
+            }
+            
+            if let (Some(start), Some(end)) = (&network.start_address, &network.end_address) {
+                println!("Range: {} - {}", start, end);
+            }
+            
+            if let Some(country) = &network.country {
+                println!("Country: {}", country);
+            }
+        }
+
+        Ok(())
+    }
+    ```
+  </Tab>
+  
+  <Tab title="IPv6">
+    ```rust
+    use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+    #[tokio::main]
+    async fn main() -> Result<(), Box<dyn std::error::Error>> {
+        let client = RdapClient::new()?;
+        let request = RdapRequest::new(QueryType::Ip, "2001:4860:4860::8888");
+        let result = client.query(&request).await?;
+
+        if let RdapObject::IpNetwork(network) = result {
+            if let Some(version) = &network.ip_version {
+                println!("IP Version: IPv{}", version);
+            }
+            
+            if let (Some(start), Some(end)) = (&network.start_address, &network.end_address) {
+                println!("Range: {} - {}", start, end);
+            }
+        }
+
+        Ok(())
+    }
+    ```
+  </Tab>
+  
+  <Tab title="CIDR">
+    ```rust
+    use rdap::{RdapClient, RdapRequest, QueryType};
+
+    #[tokio::main]
+    async fn main() -> Result<(), Box<dyn std::error::Error>> {
+        let client = RdapClient::new()?;
+        
+        // Query with CIDR notation
+        let request = RdapRequest::new(QueryType::Ip, "192.0.2.0/24");
+        let result = client.query(&request).await?;
+        
+        println!("Result: {:?}", result);
+
+        Ok(())
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Source reference:** `examples/ip_lookup.rs`
+
+<Note>
+The library automatically handles IPv6 normalization and can retry failed queries with CIDR notation for better compatibility with some RDAP servers.
+</Note>
+
+## AS Number Queries
+
+Query Autonomous System Number information:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType, RdapObject};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    
+    // AS prefix is optional
+    let request = RdapRequest::new(QueryType::Autnum, "AS15169");
+    // or
+    let request = RdapRequest::new(QueryType::Autnum, "15169");
+    
+    let result = client.query(&request).await?;
+
+    if let RdapObject::Autnum(autnum) = result {
+        if let Some(start) = autnum.start_autnum {
+            println!("AS Number: AS{}", start);
+        }
+        
+        if let Some(name) = &autnum.name {
+            println!("Name: {}", name);
+        }
+        
+        if let Some(country) = &autnum.country {
+            println!("Country: {}", country);
+        }
+        
+        println!("Contact entities: {}", autnum.entities.len());
+    }
+
+    Ok(())
+}
+```
+
+**Source reference:** `examples/asn_lookup.rs`
+
+## Custom RDAP Server
+
+Query a specific RDAP server instead of using bootstrap discovery:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+use url::Url;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    
+    // Specify custom server
+    let server = Url::parse("https://rdap.nic.cz")?;
+    let request = RdapRequest::new(QueryType::Domain, "nic.cz")
+        .with_server(server);
+    
+    let result = client.query(&request).await?;
+    println!("Result: {:?}", result);
+
+    Ok(())
+}
+```
+
+**Source reference:** `examples/custom_server.rs`, `src/request.rs:82`
+
+## Batch Queries
+
+Query multiple resources efficiently:
+
+```rust
+use rdap::{RdapClient, RdapRequest};
+use tokio::time::{Duration, sleep};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    
+    let queries = vec!["example.com", "google.com", "github.com"];
+    
+    for query in queries {
+        let query_type = RdapRequest::detect_type(query)?;
+        let request = RdapRequest::new(query_type, query);
+        
+        match client.query(&request).await {
+            Ok(result) => {
+                println!("✓ {}: {:?}", query, result);
+            }
+            Err(e) => {
+                eprintln!("✗ {}: {}", query, e);
+            }
+        }
+        
+        // Be nice to servers - rate limit
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    Ok(())
+}
+```
+
+**Source reference:** `examples/batch_query.rs`
+
+<Warning>
+Always implement rate limiting when performing batch queries to avoid overwhelming RDAP servers.
+</Warning>
+
+## Entity Queries
+
+Query entity (registrant, contact) information directly:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Entity, "EXAMPLE-HANDLE");
+    let result = client.query(&request).await?;
+    
+    println!("Entity: {:?}", result);
+
+    Ok(())
+}
+```
+
+## TLD Queries
+
+Query top-level domain information from IANA:
+
+```rust
+use rdap::{RdapClient, RdapRequest, QueryType};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RdapClient::new()?;
+    let request = RdapRequest::new(QueryType::Tld, "com");
+    let result = client.query(&request).await?;
+    
+    println!("TLD info: {:?}", result);
+
+    Ok(())
+}
+```
+
+<Note>
+TLD queries are automatically routed to IANA's RDAP service.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Query Types" icon="list" href="/library/query-types">
+    Explore all available query types including searches
+  </Card>
+  
+  <Card title="Working with Results" icon="code" href="/library/working-with-results">
+    Learn how to extract data from RDAP responses
+  </Card>
+</CardGroup>
